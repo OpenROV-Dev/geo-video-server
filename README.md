@@ -1,3 +1,5 @@
+Not for general use yet. Streaming of particular uvc cameras over socket.io
+
 This project is responsible for serving the h264 stream from the geo camera via socket.io.
 
 It first tries to init the camera:
@@ -12,8 +14,6 @@ It first tries to init the camera:
 Dependencies.
 Use scripts to load Dependencies
  - apt get the geo-driver
-
-T
 
 
 License: All Rights Reservered
