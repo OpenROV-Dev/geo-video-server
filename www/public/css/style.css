@@ -1,0 +1,11 @@
+#camera1 {
+  width:100%;
+  height: 100%;
+  position: relative;
+}
+
+#show-settings {
+  position: absolute;
+  right: 0px;
+  top: 0px;
+}

@@ -1,0 +1,135 @@
+{
+   "system": {
+        "@Dates" : "20151211 1323",
+        "@Vin"   : "ov4689 default",
+        "@Vout"  : "1080p avc ",
+
+        "BOOTMODE"       : "usb",
+        "BOARD"          : "mobileyes5",
+        "CAMERA_MODE"    : "IPCAM",
+        "MAINAPP"        : "app_json",
+        "DAC"            : "ti3100",
+        "ADC"            : "onchip",
+        "AUDIO_MCLK"     : "audgenclk",
+        "AIN0"           : "slave",
+        "AIN1"           : "slave",
+        "I2S_CLKSRC"     : "dac",
+        "MIC_GAIN"       : "45",
+        "SPK_GAIN"       : "40",
+        "SPK_SAMPLERATE" : "16000",
+        "MIC_SAMPLERATE" : "16000",
+        "NO_OF_MIC"      : "2",
+        "SPKR_STATE"     : "on",
+        "AUDIO_ENABLE"   : "0",
+        "@MAXRES_INPUT"   : "1080p24",
+        "MAXRES_INPUT"   : "4Mp30",
+        "SENSOR_POWER_DOWN_POLARITY":"1"
+    },
+
+    "codec" : {
+        "isp0": {
+            "type": "isp",
+             "params" : {
+                "Q_ISP_CMP_AE_MINIMUM_FRAME_RATE" : 15,
+                "Q_ISP_CMP_AUTOEXP_ALG" : 2,
+                "Q_ISP_CMP_AE_EV_TARGET" : 100
+            }
+        },
+
+        "vcap0": {
+            "type": "vcap",
+            "cropWidth"         : 0,
+            "cropHeight"        : 0,
+            "stcPerOutputFrame" : 6000,
+            "numOutputFrames"   : 3,
+            "params" : {
+                "Q_VCAP_CMP_VARIABLE_FRAME_RATE" : 1,
+                "Q_VCAP_CMP_AV_SYNCH_ENABLE"     : 0,
+                "Q_VCAP_CMP_STC_PER_FRAME"       : 6000,
+                "Q_VCAP_CMP_HW_BYPASS_TFILTY"    : 0,
+                "Q_VCAP_CMP_HW_BYPASS_TFILTC"    : 0,
+                "Q_VCAP_CMP_TF_LUMA_HIGH"        : 31,
+                "Q_VCAP_CMP_HW_BYPASS_MOT_VFILT" : 1,
+                "Q_VCAP_CMP_TF_ATTENUATION_Y0"   : 6,
+                "Q_VCAP_CMP_TF_ATTENUATION_Y1"   : 2,
+                "Q_VCAP_CMP_TF_ATTENUATION_C0"   : 6,
+                "Q_VCAP_CMP_TF_ATTENUATION_C1"   : 2,
+                "Q_VCAP_CMP_TF_LEVEL"            : 4
+            }
+        },
+
+
+        "dewarpForward": {
+            "type"            : "dewarp",
+            "parent"          : "vcap0",
+            "outWidth"        : 1920,
+            "outHeight"       : 1080,
+            "dewarpedFrameWidth"  : 2688,
+            "dewarpedFrameHeight" : 1472,
+            "maxNumMaps"      : 4,
+            "numOutputFrames" : 4,
+            "minMapN"         : 128,
+            "offsetX": 0,
+            "offsetY": 0,
+            "displayWidth" : 1920,
+            "displayHeight": 1080,
+            "displayStripe": 1920,
+            "ePTZMode"        : "WM_1PANELEPTZ",
+            "ePTZParams": {
+                "HPan": 0,
+                "VPan": 15,
+                "Tilt": 0,
+                "Zoom": 60
+            },
+            "params" : {
+                "Q_DEWARP_CMP_SET_LENS_MILI_FOV"    : 198000,
+                "Q_DEWARP_CMP_SET_LENS_MILI_RADIUS" : 1350000,
+                "Q_DEWARP_CMP_SET_LENS_MILI_HSHIFT" : 20000,
+                "Q_DEWARP_CMP_SET_LENS_MILI_VSHIFT" : 0
+            }
+        },
+
+        "nvppCH1": {
+            "type": "nvpp",
+            "parent": "dewarpForward",
+            "maxWidth": 1920,
+            "maxHeight": 1080,
+            "cropWidth": 0,
+            "cropHeight": 0,
+            "cropOffsetX": 0,
+            "cropOffsetY": 0,
+            "outWidth": 1920,
+            "outHeight": 1080,
+            "stcPerOutputFrame": 3000,
+            "avcPreProc": 1,
+            "params" : {
+                "Q_NVPP_CMP_VARIABLE_FRAME_RATE": 1,
+                "Q_NVPP_CMP_INITIAL_DELAY": 1
+             }
+        },
+
+        "avcencCH1": {
+            "type"             : "avcenc",
+            "parent"           : "nvppCH1",
+            "channel"          : "CH1",
+            "streamId"         : 0,
+            "maxWidth"         : 1920,
+            "maxHeight"        : 1080,
+            "outputBufferSize" : 12500000,
+            "profile"          : "high",
+            "level"            : 41,
+            "gopSize"          : 1,
+            "bitRate"          : 10000000,
+            "perfLevel"        : 4,
+            "rateControl"      : "VBR",
+            "videoEncParams": {
+                "Q_AVCENC_CMP_VPP_REGION_STAT_ENABLE": 0,
+                "Q_AVCENC_CMP_QMED_ENABLE"           : 1,
+                "Q_AVCENC_CMP_QMED_DEWARP_ENABLE"    : 1
+            },
+            "videoEncRateControlParams": {
+            }
+        }
+
+    }
+}

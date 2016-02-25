@@ -1,0 +1,480 @@
+<link rel="import" href="../polymer/polymer.html">
+<!--
+Issues affecting live H264 streaming (Updated 2015 Nov 18)
+=====================================
+
+currentTime as reported by HTML5 <video> is not frame-accurate
+https://code.google.com/p/chromium/issues/detail?id=555376
+
+MSE - remove() to escape QuotaExceededError is leading to decode error later
+https://code.google.com/p/chromium/issues/detail?id=529990
+
+MSE MP4 stream parser emitting keyframes that are not IDR frames, causing corruption on mac p
+https://code.google.com/p/chromium/issues/detail?id=516039
+
+videoTag.currentTime should not exceed videoTag.buffered.end(N) for the currently playing range
+https://code.google.com/p/chromium/issues/detail?id=414828
+
+Implement SourceBuffer.mode attribute
+https://code.google.com/p/chromium/issues/detail?id=249422
+
+Loosen media segments starting with a keyframe restriction
+https://code.google.com/p/chromium/issues/detail?id=229412
+-->
+<dom-module id="x-h264-video">
+  <style>
+    /* TODO(polyup): For speed, consider reworking these styles with .classes
+                     and #ids rather than [attributes].
+    */
+    [hidden] {
+      display: none !important;
+    }
+    /* make the video stretch to fill the screen in WebKit */
+    :-webkit-full-screen {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+  <style>
+      :host {
+        display: block;
+        width: 320px;
+        height: 200px}
+
+      #video {
+        width: 100%;
+        height: 100%;
+      }
+      #stats {
+        top:0px;
+        left:0;
+        position:absolute;
+        margin: 10px;
+        font-variant:bold;
+        color:orange;
+        font-size:2vw;
+/*	visibility:hidden;        */
+      }
+
+    </style>
+  <template>
+    <div id="videocontainer" style="display:block; height:100%; width:100%; position:relative;" on-hover="">
+      <img id="videomissing" src="{{novideoImageURL}}" hidden$="{{isHidden}}">
+      <video id="video" controls preload="metadata"></video>
+      <content ></content>
+        <div id='stats'>
+        <div id='fps'><span>{{fps}}</span> decoded fps</div>
+        <div id='bps'><span>{{bps}}</span> b/s</div>
+        <div id='currentTime'><span>{{currentTime}}</span> (current time)</div>
+        <div id='buffertime'><span>{{formatSeconds(buffertime)}}</span> (buffertime)</div>
+        <div ><span>{{formatSeconds(buffertimeStart)}}</span> (buffertime-start)</div>
+        <div ><span>{{formatSeconds(buffertimeEnd)}}</span> (buffertime-end)</div>
+        
+        <div id='gaptime'><span>{{formatSeconds(gaptime)}}</span> (gaptime)</div>  
+        <div id='queue'><span>{{queueSize}}</span> (queue size)</span></div>
+        <div><span>{{error}}</span> Video error?</div>
+        <div><span>{{paused}}</span> Video paused?</div>
+        <div><span>{{videoState}}</span> Video state</div>
+        <div><span>{{droppedframes}}</span> dropped frames</div>
+        <div><span>{{decodedframes}}</span> decoded frames</div> 
+        <div><span>{{stats.errors.video.code3}}</span> code3 video errors</div>
+        <div><span>{{stats.errors.video.bufferDisassociation}}</span> buffer dissasociations</div>
+        <div><span>{{stats.errors.video.totalfailure}}</span> totalfailure</div>        
+      </div>
+      </div>
+  </template>
+  <script>
+    (function () {
+      Polymer({
+        is: 'x-h264-video',
+        properties: {
+          buffer: {
+            type: Boolean,
+            value: true
+          },
+          canvas: {
+            type: Object,
+            notify: true
+          },
+          framespersecond: {
+            type: String,
+            value: '10',
+            notify: true
+          },
+          isHidden: {
+            type: Boolean,
+            value: false
+          },
+          src: {
+            type: String,
+            value: 'http://127.0.0.1:8090/?action=stream',
+            notify: true
+          },
+          latencyReducer: {
+            type: Boolean,
+            value: true
+          }
+        },
+       // behaviors: [namespace('behaviors').oROVStandard],
+        registerEmitterHanlders: function(emitter){
+          if (this.eventEmitter == undefined) {
+              this.eventEmitter=emitter;
+          }
+          
+          var self = this;
+
+          emitter.withHistory.on('settings-change.video',function(settings){
+//            self.videoSource = settings.video.forward_camera_url;
+          });
+
+          emitter.on('video.forward.get-canvas',function(callback){
+            if (typeof(callback)==='function'){
+              callback({forwardCanvas:this.canvas});
+            }
+          });
+
+        },
+        ready: function () {
+          var self = this;
+          this.canvas = this.$['video-canvas'];
+          this.fps_count = 0;
+          this.fps = 0;
+          this.datapackets_count = 0;
+          this.bps_count = 0;
+          this.bps = 0;
+          this.buffertime = 0;
+          this.buffertimeStart = 0;
+          this.buffertimeEnd = 0;
+          this.gaptime = 0;
+          this.paused = true;
+          this.error = false;
+          this.currentTime = 0;
+          this.stats = {errors:{
+                         video:{
+                           code3:0,
+                           bufferDisassociation:0,
+                           totalfailure:0
+                         },
+                         mediaSource:0,bufferSource:0}
+          };
+        },
+        play: function (callback) {
+          var self = this;
+          if (this.eventEmitter == undefined) return;
+          
+          var video = this.$.video;
+          var queue = [];
+          this.queue = queue;
+          var init_queued = false;
+          var waitingForDecoderReset = 0;
+          var reInit = function(){
+            init_queued = false;
+            mediaSource = new MediaSource();
+            video.src = window.URL.createObjectURL(mediaSource);
+            //sourceopen();
+          };
+          
+          if (this.mediaSource.readyState !=  "open"){
+           setTimeout(this.play.bind(this,callback),500);
+           console.log("retrying source open");
+           return;
+          }
+          //Only handling a single video stream at the moment
+          if (this.mediaSource.sourceBuffer !== undefined)
+          {
+            console.log('To many streams!');
+            return;
+          }
+          this.sourceBuffer = this.mediaSource.addSourceBuffer('video/mp4; codecs="avc1.4d401e"');
+//          ['updatestart','updateend', 'update', 'error', 'abort' ].forEach(function(ev) {
+          ['error', 'abort' ].forEach(function(ev) {
+
+            self.sourceBuffer.addEventListener(ev, function() {
+               console.log('sourceBuffer event:', ev);
+            })
+            
+          });
+
+          var lastBuffer;
+          var lastDecoded;
+          this.sourceBuffer.addEventListener('updateend',function(){
+           if (self.mediaSource.readyState!='open') {
+             console.log('media not open:' + self.mediaSource.readyState);
+             return;
+           } 
+           if (video.error !== null) {
+             console.log('HTML Video elment in error state');
+             console.dir(video.error);
+             return;
+           }
+           
+            
+             if (queue.length > 0 && !self.sourceBuffer.updating) {
+
+               if ((self.sourceBuffer.buffered.length > 0) && (lastBuffer == self.sourceBuffer.buffered.end(0))){
+                console.log('Frame rejected?');
+             //   console.dir(self.sourceBuffer);
+            //    console.dir(self.mediaSource);
+             //   console.dir(self.video);
+                //  sourceBuffer.timestampOffset = sourceBuffer.buffered.end(0);
+                //self.sourceBuffer.remove(0, Number.POSITIVE_INFINITY); //clear buffer
+                video.currentTime += .001; //trick to "unstick" video
+               }
+               if (self.sourceBuffer.buffered.length > 0){
+                 lastBuffer =self.sourceBuffer.buffered.end(0);
+               }
+                self.sourceBuffer.appendBuffer(queue.shift());
+             } else {
+             }        
+
+
+            //decoder has stalled
+            if ((lastDecoded > 0) &&
+              (Date.now()>waitingForDecoderReset) &&
+              (self.video.videoState !== 'stalled') &&
+              (lastDecoded ==self.video.webkitDecodedFrameCount|| self.video.mozDecodedFrames))
+            {
+              console.log('Decoder stall detected');
+              if (!self.sourceBuffer.updating){
+                //self.sourceBuffer.remove(0, Number.POSITIVE_INFINITY); //clear buffer
+                //console.log('Buffers cleared');
+                self.sourceBuffer.abort();
+                self.video.currentTime = self.video.seekable.end(0);
+                console.log('Aborting buffer');
+                waitingForDecoderReset = Date.now()+1000;
+              }
+            }
+            
+            lastDecoded =self.video.webkitDecodedFrameCount|| self.video.mozDecodedFrames;;            
+
+          });
+          
+          
+          console.log("AppendMode:" + this.sourceBuffer.appendMode);
+          
+          this.eventEmitter.emit('request_Init_Segment',function(data){
+            //prefix the stream with the initial segment
+            var init_segment = new Uint8Array(data);
+            self.sourceBuffer.appendBuffer(init_segment);
+            init_queued=true;
+            console.log("Init segment received");
+          });
+          
+          
+          var keyframe = false;
+          this.eventEmitter.on('x-h264-video.data', function(data){
+            if (!init_queued) return;
+            
+            //https://crbug.com/229412
+            if (!keyframe){
+              if (data.length<65536) return //wait for iframe
+              keyframe=true;
+            }
+            self.fps_count++;
+            self.bps_count+=data.length;
+            if (data == null){
+              console.log("Null data received");
+              return;
+            }
+            
+           var chunk = new Uint8Array(data);
+
+           if (video.paused || init_queued == false || self.sourceBuffer == null || self.sourceBuffer.updating || queue.length > 0 || (video.error !== null)){
+             queue.push(chunk);
+           }else{
+             self.sourceBuffer.appendBuffer(chunk);
+             if (video.paused) {
+               //video.playbackRate = 2;
+               video.play();
+               //video.currentTime=video.buffered.end(0);
+             }
+           }
+
+ //new
+           //if both stalled buffer and decoder treat as video error
+          if  ((!self.sourceBuffer.updating) && 
+            (lastDecoded > 0) &&
+            (self.videoState !== 'stalled') &&
+            (lastDecoded ==self.video.webkitDecodedFrameCount|| self.video.mozDecodedFrames)){
+              self.video.stats.errors.video.totalfailure++;
+              self.notifyPath('video.stats.errors.video.totalfailure');
+              video.src = '';
+              video.load;
+              return;
+            }
+            
+           //This is a work around because the default mode (segments) for video playback
+           //assumes frames out of sequence and won't just play them in the order
+           //they are palced in the buffer.  Wating for (sequence mode to be implimented)
+           //if ((video.buffered.length>0) && (video.currentTime==0)) {
+           if ((video.buffered.length>0) && (video.currentTime==0) ) {
+                video.currentTime=video.buffered.start(0);
+           }
+           
+           //Check for a buffer getting disassociated from the video object... possibly from the browser window sleeping?
+           if (self.sourceBuffer!==undefined && video.buffered.length == 0){
+             self.stats.errors.video.bufferDisassociation++;
+             self.notifyPath('stats.errors.video',self.stats.errors.video);
+           }
+           
+           if (video.paused && video.buffered.length > 0 && init_queued) {
+            //  video.currentTime=video.buffered.end(0);
+              video.play(); // Start playing after 1st chunk is appended.
+           }
+           
+           //The system is likely ran out of content and stalled
+           if (self.videoState=='stalled' && queue.length > 0  && self.sourceBuffer !== undefined && !self.sourceBuffer.updating){
+              self.sourceBuffer.appendBuffer(queue.shift());
+              console.log('Queue size:'+ queue.length);             
+           }
+           
+           
+          });          
+
+          //only need to redraw at the framerate of source video
+          this.fire('playing', this.$['video-canvas']);
+        },
+        attached: function(){
+          var self=this;
+
+          var MediaSource = window.MediaSource || window.WebKitMediaSource;
+          if (!!!MediaSource) {
+             alert('MediaSource API is not available');
+          }
+
+          this.mediaSource = new MediaSource();
+          ['sourceopen','sourceended','sourceclose','loadedmetadata','loadeddata', 'canplay', 'canplaythrough', 'seeking', 'ended', 'loadstart', 'playing', 'waiting', 'progress', 'suspend', 'stalled' ].forEach(function(ev) {
+            self.mediaSource.addEventListener(ev, function() {
+               console.log('mediaSource event:', ev);
+            })
+          });
+          
+          this.mediaSource.addEventListener('sourceopen',function(){
+            self.play();
+          });
+          
+          ['addsourcebuffer', 'removesourcebuffer' ].forEach(function(ev) {
+            self.mediaSource.sourceBuffers.addEventListener(ev, function() {
+               console.log('sourceBufferList event:', ev);
+            })
+          });          
+
+          ['loadstart','emptied', 'canplaythrough', 'ended', 'ratechange', 'progress','stalled','playing','durationchange','resize','suspend','loadedmetadata','waiting','timeupdate','volumechange','abort','loadeddata','seeking','play','error','canplay','seeked','pause' ].forEach(function(ev) {
+            self.$.video.addEventListener(ev, function() {
+               console.log('video event:', ev);
+               if (ev=='seeking'){
+                 if (video.currentTime>video.buffered.end(0)){
+                   console.log('SHOULD NOT BE POSSIBLE');
+                 }
+               }
+               switch(ev){
+                 case 'error':
+                   console.log("Video Error" + this.error.code);
+                   if (this.error.code == 3){
+                /*     self.sourceBuffer.abort();
+                     self.video.currentTime = Math.min(self.video.seekable.end(0),self.video.buffered.end(0))-.001;
+                     if (self.sourceBuffer !== undefined && !self.sourceBuffer.updating){
+                        self.sourceBuffer.appendBuffer(self.queue.shift());
+                     }
+                */
+
+                   self.video.src = "";
+                   self.video.load();
+                   self.mediaSource = new MediaSource(); 
+                   ['sourceopen','sourceended','sourceclose','loadedmetadata','loadeddata', 'canplay', 'canplaythrough', 'seeking', 'ended', 'loadstart', 'playing', 'waiting', 'progress', 'suspend', 'stalled' ].forEach(function(ev) {
+                       self.mediaSource.addEventListener(ev, function() {
+                       console.log('mediaSource -new- event:', ev);
+                     })
+                   });
+                   self.mediaSource.tagged = "recovered one";
+                   self.mediaSource.addEventListener('sourceopen',function(){
+                     self.play();
+                   });
+                   
+                   ['addsourcebuffer', 'removesourcebuffer' ].forEach(function(ev) {
+                     self.mediaSource.sourceBuffers.addEventListener(ev, function() {
+                     console.log('sourceBufferList -new- event:', ev);
+                     })
+                   });
+                    self.video.src = window.URL.createObjectURL(self.mediaSource);
+                    self.video.load();
+                   self.set('stats.errors.video.code3',self.stats.errors.video.code3+1);
+                   }
+                   break;
+                 case 'ended':
+                 case 'stalled':
+                 case 'progress':
+                   self.videoState = ev;
+               }
+            })
+          })  
+          
+          this.$.video.src = window.URL.createObjectURL(this.mediaSource);
+          
+          var self=this;
+          var video = this.$.video;
+          this.video = video;
+          
+          setInterval(function(){
+            self.droppedframes = self.video.webkitDroppedFrameCount;
+            self.decodedframes = self.video.webkitDecodedFrameCount || self.video.mozDecodedFrames;
+            self.fps = (self.droppedframes+ self.decodedframes) - self.fps_count;
+            self.bps = (self.bps_count*8).toLocaleString();
+            self.fps_count = self.droppedframes+ self.decodedframes;
+            self.bps_count = 0;
+            if (self.sourceBuffer.length <= 0 ) return;
+            //remove old video from the buffer
+            //Do to chrome issues, must keep the lats I frame in the buffer.
+            if((!self.sourceBuffer.updating) && (video.buffered.length>0)){
+              if (video.currentTime-90 > video.buffered.start(0)){
+                 self.sourceBuffer.remove(video.buffered.start(0),video.currentTime-90);
+              }
+            }
+            
+            if (!self.latencyReducer) return;
+            //video.currentTime = self.sourceBuffer.buffered.end(0);
+            
+            if( (video.buffered.length > 0) && (video.seekable.end(0)-video.currentTime) > .20){
+                video.currentTime=video.seekable.end(0)-.001;
+            }
+  
+          },1000)
+          
+
+          //update stats
+          setInterval(function(){
+            self.paused = self.video.paused;
+            self.queueSize = self.queue.length;  
+            self.error = self.video.error !== null;
+            self.currentTime = self.video.currentTime.toLocaleString();
+            if (self.mediaSource.readyState !== 'open') return;
+            var sourceBuffer = self.sourceBuffer;
+            if (sourceBuffer==undefined) return;
+            if (sourceBuffer.buffered.length > 0){
+               self.buffertime = sourceBuffer.buffered.end(0)-sourceBuffer.buffered.start(0)
+               self.gaptime = video.buffered.end(0) - video.currentTime;
+               self.buffertimeStart = video.buffered.start(0);
+               self.buffertimeEnd = video.seekable.end(0);
+            }
+  
+           //general stall check
+           if ((self.videoState=='stalled') && (self.sourceBuffer.buffered.length > 0) ){ //Assume we are stuck.. again
+                 video.currentTime = video.seekable.end(0);
+                 console.log('bumbing...');
+           }
+          },500);      
+        },
+        stop: function () {
+          clearInterval(this.videopainttimerId);
+          this.isHidden = false;
+        },
+        get videocanvas() {
+          return this.$['video-canvas'];
+        },
+        formatSeconds: function(seconds){
+          return Number(seconds).toFixed(2) + " seconds";
+        }
+      });
+    }());
+  </script>
+</dom-module>
