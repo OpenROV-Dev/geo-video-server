@@ -9,20 +9,9 @@ function video(deps) {
   this.h264stream = deps.video.videoStream;
 
   var dps = 0;
-  var buffer = new Buffer(4000000);
-  var bufferTail = 0;
   
   this.h264stream.on('data', function(data) {
-
-    //This data buffer is due to Chrome not accepting non I frames in a segment
-    //data.copy(buffer,bufferTail);
-    buffer.write(data,bufferTail,data.length,'binary');
-		bufferTail+=data.length;
-  	if (bufferTail<65536){
-  		return;
-  	}    
-    self.io.compress(false).volatile.emit('x-h264-video.data', buffer.slice(0,bufferTail));
-    bufferTail= 0;
+    self.io.compress(false).volatile.emit('x-h264-video.data', data);
     dps++;
   });
 
