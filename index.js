@@ -44,7 +44,7 @@ camera.on('ready',function(){
         //The stream is up and running now.
         videoServer = require('videoServer')(deps);
         mdns = require('mDNS-SD')('geomux',options.port,{resolution: options.resolution, framerate: options.framerate, videoMimeType: 'video/mp4', cameraLocation: options.location, relativeServiceUrl:options.url});
-
+        
         if (options.writeToDisk){
             //Todo: Verify the async writes preserve order. First test appeared to be a corrupt stream.  Could also simply need to have encoding set.
             stream = fs.createWriteStream("/tmp/video.mp4");
