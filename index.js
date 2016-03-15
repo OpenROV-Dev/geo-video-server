@@ -19,12 +19,12 @@ const mdns=require('mdns');
 
 var getOptions = function getOptions(args){
     var defaults = {
-        location: process.env.LOCATION || "forward",
-        port: process.env.PORT || 8099,
-        fps: process.env.FPS || 30,
-        mimeType: process.env.MIMETYPE || 'video/mp4',
-        resolution: process.env.RESOLUTION || '1920x1080',
-        device: process.env.DEVICE || '/dev/video0'
+        location: process.env.GEO_LOCATION || "forward",
+        port: process.env.GEO_PORT || 8099,
+        fps: process.env.GEO_FPS || 30,
+        mimeType: process.env.GEO_MIMETYPE || 'video/mp4',
+        resolution: process.env.GEO_RESOLUTION || '1920x1080',
+        device: process.env.GEO_DEVICE || '/dev/video0'
     };
     var argv = require('minimist')(args);
     return Object.assign(defaults,argv);
