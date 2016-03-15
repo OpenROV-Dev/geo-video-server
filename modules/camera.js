@@ -7,8 +7,8 @@ var Camera = function(){
 
   var mxcam_command = "mxcam";
   var mxuvc_command = "mxuvc";
-  var init_camera_script = "./platform/linux/bootcamera.sh";
-  
+  var init_camera_script = __dirname +"/../platform/linux/bootcamera.sh";
+    
   this.video = null;
   this.status = 'initializing';
 

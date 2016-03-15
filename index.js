@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 //To eliminate hard coding paths for require, we are modifying the NODE_PATH to include
 //out lib folder
 var oldpath = '';
