@@ -15,7 +15,6 @@ var videoServer;
 var io = require('socket.io')(8099);
 var fs = require('fs');
 var options={'writeToDisk' : false};
-const mdns=require('mdns');
 
 var getOptions = function getOptions(args){
     var defaults = {
@@ -35,7 +34,7 @@ options = getOptions(process.argv.slice(2));
 camera.on('ready',function(){
     var deps = {};
     deps.video = camera.video;
-    
+
     deps.socketIOclient = io;
     var stream;
     camera.video.videoStream.on('initData', function(data){
@@ -44,19 +43,21 @@ camera.on('ready',function(){
 
         //The stream is up and running now.
         videoServer = require('videoServer')(deps);
-        mdns = require('mDNS-SD')('geomux',options.port,{resolution: options.resolution, framerate: options.framerate, videoMimeType: 'video/mp4', cameraLocation: options.location, relativeServiceUrl:options.url});
-        
+        //announce via json on stderr
+        var announcement = {service:'geomux',port:options.port,addresses:['127.0.0.1'],txtRecord:{resolution: options.resolution, framerate: options.framerate, videoMimeType: 'video/mp4', cameraLocation: options.location, relativeServiceUrl:options.url}};
+        stderr.log(JSON.stringify(announcement));
+
         if (options.writeToDisk){
             //Todo: Verify the async writes preserve order. First test appeared to be a corrupt stream.  Could also simply need to have encoding set.
             stream = fs.createWriteStream("/tmp/video.mp4");
             stream.write(data);
         }
     });
-    
+
     camera.video.videoStream.on('data', function(data){
         if (stream!==undefined){
             stream.write(data);
         };
-    });    
+    });
 
 });

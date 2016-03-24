@@ -19,3 +19,5 @@ bower_components
 .npm
 # Optional REPL history
 .node_repl_history
+
+*.log
