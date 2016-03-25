@@ -45,7 +45,7 @@ camera.on('ready',function(){
         videoServer = require('videoServer')(deps);
         //announce via json on stderr
         var announcement = {service:'geomux',port:options.port,addresses:['127.0.0.1'],txtRecord:{resolution: options.resolution, framerate: options.framerate, videoMimeType: 'video/mp4', cameraLocation: options.location, relativeServiceUrl:options.url}};
-        stderr.log(JSON.stringify(announcement));
+        console.error(JSON.stringify(announcement));
 
         if (options.writeToDisk){
             //Todo: Verify the async writes preserve order. First test appeared to be a corrupt stream.  Could also simply need to have encoding set.
