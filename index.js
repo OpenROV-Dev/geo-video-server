@@ -31,13 +31,14 @@ var getOptions = function getOptions(args){
 }
 
 options = getOptions(process.argv.slice(2));
-
+var beacon_timer = null;
 camera.on('ready',function(){
     var deps = {};
     deps.video = camera.video;
 
     deps.socketIOclient = io;
     var stream;
+
     camera.video.videoStream.on('initData', function(data){
         console.log("got init data");
         deps.video.initFrame = data;
@@ -48,6 +49,9 @@ camera.on('ready',function(){
         var announcement = {service:'geomux',port:options.port,addresses:['127.0.0.1'],txtRecord:{resolution: options.resolution, framerate: options.framerate, videoMimeType: 'video/mp4', cameraLocation: options.location, relativeServiceUrl:options.url}};
         var jannouncement =  JSON.stringify(announcement);
         console.error(jannouncement);
+        if (beacon_timer !== null){
+          clearInterval(beacon_timer);
+        }
         setInterval(function(){
             console.error(jannouncement);
         },5000);
