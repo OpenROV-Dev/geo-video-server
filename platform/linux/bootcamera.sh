@@ -1,4 +1,13 @@
 #!/bin/bash
+
+if [ -f /.need-depmod ]
+then
+  modprobe -r uvcvideo || true
+  depmod -a
+  modprobe uvcvideo
+  rm /.need-depmod
+fi
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 geoCameraFound=$(mxcam list | grep -q 'device #1')
 
@@ -10,7 +19,7 @@ fi
 
 awaitingBoot=$(mxcam whoami | grep -q 'Waiting for USB boot')
 
-if $awaitingBoot 
+if $awaitingBoot
 then
     echo 'Booting camera'
     mxcam boot $DIR/../../firmware/gc6500_ddrboot_fw.gz.img $DIR/../../geoconf/ov4689_H264_1080p24.json
