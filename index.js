@@ -23,7 +23,8 @@ var getOptions = function getOptions(args){
         fps: process.env.GEO_FPS || 30,
         mimeType: process.env.GEO_MIMETYPE || 'video/mp4',
         resolution: process.env.GEO_RESOLUTION || '1920x1080',
-        device: process.env.GEO_DEVICE || '/dev/video0'
+        device: process.env.GEO_DEVICE || '/dev/video0',
+        url: process.env.GEO_URL || ':'+8099+'/'
     };
     var argv = require('minimist')(args);
     return Object.assign(defaults,argv);
@@ -45,7 +46,11 @@ camera.on('ready',function(){
         videoServer = require('videoServer')(deps);
         //announce via json on stderr
         var announcement = {service:'geomux',port:options.port,addresses:['127.0.0.1'],txtRecord:{resolution: options.resolution, framerate: options.framerate, videoMimeType: 'video/mp4', cameraLocation: options.location, relativeServiceUrl:options.url}};
-        console.error(JSON.stringify(announcement));
+        var jannouncement =  JSON.stringify(announcement);
+        console.error(jannouncement);
+        setInterval(function(){
+            console.error(jannouncement);
+        },5000);
 
         if (options.writeToDisk){
             //Todo: Verify the async writes preserve order. First test appeared to be a corrupt stream.  Could also simply need to have encoding set.
