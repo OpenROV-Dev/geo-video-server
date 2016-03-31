@@ -5,7 +5,7 @@ console.log(__dirname);
 app.use(express.static(__dirname + '/public'));
 app.use('/components',express.static(__dirname + '/bower_components'));
 app.use('/components',express.static(__dirname + '/public/webcomponents'));
-app.use('/socket.io',express.static(__dirname + '/../node_modules/socket.io/node_modules/socket.io-client'));
+app.use('/socket.io',express.static(__dirname + '/../node_modules/socket.io-client'));
 
 
 app.listen(8098, function () {

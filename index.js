@@ -10,7 +10,6 @@ process.env['NODE_PATH']=__dirname+'/modules:'+oldpath;
 require('module').Module._initPaths();
 console.log("Set NODE_PATH to: "+process.env['NODE_PATH'] );
 
-var camera = require("camera.js");
 var videoServer;
 var io = require('socket.io')(8099);
 var fs = require('fs');
@@ -24,15 +23,27 @@ var getOptions = function getOptions(args){
         mimeType: process.env.GEO_MIMETYPE || 'video/mp4',
         resolution: process.env.GEO_RESOLUTION || '1920x1080',
         device: process.env.GEO_DEVICE || '/dev/video0',
-        url: process.env.GEO_URL || ':'+8099+'/'
+        url: process.env.GEO_URL || ':'+8099+'/',
+        mock: process.env.GEO_MOCK || false
     };
     var argv = require('minimist')(args);
     return Object.assign(defaults,argv);
 }
 
+
+
 options = getOptions(process.argv.slice(2));
+
+var camera
+if (options.mock){
+  camera = require("mock-camera.js");
+}else{
+  camera = require("camera.js");
+}
 var beacon_timer = null;
+console.log('listening to ready');
 camera.on('ready',function(){
+    console.log('got ready');
     var deps = {};
     deps.video = camera.video;
 

@@ -14,8 +14,9 @@
     "tests"
   ],
   "dependencies": {
+    "eventemitter2": "~1.0.0",
     "mjpeg-video-webcomponents": "~2.0.0",
-    "socket-video-h264": "https://github.com/BrianAdams/socket-video-h264.git"    
+    "socket-video-h264": "https://github.com/BrianAdams/socket-video-h264.git"
   },
   "resolutions": {
     "polymer": "^1.0.0",

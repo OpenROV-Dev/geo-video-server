@@ -15,6 +15,8 @@ Dependencies.
 Use scripts to load Dependencies
  - apt get the geo-driver
 
+Running in Mock mode:
+If the `GEO_MOCK` environment variable is set to True, the system will attempt to use ffmpeg to generate a test pattern video.  This does requires that ffmpeg is installed.
 
-License: All Rights Reservered
+License: All Rights Reserved
 Still working out the open source license for this package.
