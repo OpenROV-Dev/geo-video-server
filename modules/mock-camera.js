@@ -8,7 +8,7 @@ var Camera = function(){
   //test pattern
   var ffmpeg_options = '-f lavfi -i testsrc=size=1920x1080:rate=30 -f mp4 -g 1 -movflags empty_moov+default_base_moof+frag_keyframe -tune zerolatency -';
   //future option?
-  //lavfi mandelbrot=s=1920x1080:start_scale=1.689­12323178293021:end_pts=212:maxiter=42192­342 
+  //lavfi mandelbrot=s=1920x1080:start_scale=1.689­12323178293021:end_pts=212:maxiter=42192­342
 
   this.video = {videoStream : new events.EventEmitter()};
   this.video.initFrame = null;
@@ -23,7 +23,7 @@ var Camera = function(){
   child.stdout.on('data', function(data){
     if (self.video.initFrame == null){
       initBuffer = initBuffer==null ? data : Buffer.concat([initBuffer,data]);
-      if (initBuffer < 25) {
+      if (initBuffer.length < 25) {
         return;
       }
 
