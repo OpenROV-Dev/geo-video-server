@@ -1,10 +1,10 @@
 {
-    "system": {
-        "@Dates" : "20151111 1323",
+   "system": {
+        "@Dates" : "20151211 1323",
         "@Vin"   : "ov4689 default",
         "@Vout"  : "1080p avc ",
 
-        "BOOTMODE"       : "snor",
+        "BOOTMODE"       : "usb",
         "BOARD"          : "mobileyes5",
         "CAMERA_MODE"    : "IPCAM",
         "MAINAPP"        : "app_json",
@@ -21,45 +21,44 @@
         "NO_OF_MIC"      : "2",
         "SPKR_STATE"     : "on",
         "AUDIO_ENABLE"   : "0",
+        "@MAXRES_INPUT"   : "1080p24",
+        "MAXRES_INPUT"   : "4Mp30",
         "SENSOR_POWER_DOWN_POLARITY":"1"
     },
 
     "codec" : {
-        "isp0": {
-            "type": "isp",
-             "params" : {
-                "Q_ISP_CMP_AE_MINIMUM_FRAME_RATE" : 15,
-                "Q_ISP_CMP_AUTOEXP_ALG" : 2,
-                "Q_ISP_CMP_AE_EV_TARGET" : 100
+        "isp0":{
+            "type":"isp",
+            "params":{
+                "Q_ISP_CMP_AE_MINIMUM_FRAME_RATE":30,
+                "Q_ISP_CMP_AUTOEXP_ALG":2,
+                "Q_ISP_CMP_ADAPTIVE_SATURATION_ENABLE":1,
+                "Q_ISP_CMP_BRIGHTNESS":0,
+                "Q_ISP_CMP_CONTRAST":128,
+                "Q_ISP_CMP_HUE":0,
+                "Q_ISP_CMP_GAMMA_CORRECTION_VAL":220,
+                "Q_ISP_CMP_SHARPNESS_STRENGTH":50,
+                "Q_ISP_CMP_TARGET_SATURATION_STRENGTH":110
             }
         },
 
-        "vcap0": {
-            "type": "vcap",
-            "cropWidth"         : 0,
-            "cropHeight"        : 0,
-            "stcPerOutputFrame" : 6000,
-            "numOutputFrames"   : 3,
-            "params" : {
-                "Q_VCAP_CMP_VARIABLE_FRAME_RATE" : 1,
-                "Q_VCAP_CMP_AV_SYNCH_ENABLE"     : 0,
-                "Q_VCAP_CMP_STC_PER_FRAME"       : 6000,
-                "Q_VCAP_CMP_HW_BYPASS_TFILTY"    : 0,
-                "Q_VCAP_CMP_HW_BYPASS_TFILTC"    : 0,
-                "Q_VCAP_CMP_TF_LUMA_HIGH"        : 31,
-                "Q_VCAP_CMP_HW_BYPASS_MOT_VFILT" : 1,
-                "Q_VCAP_CMP_TF_ATTENUATION_Y0"   : 6,
-                "Q_VCAP_CMP_TF_ATTENUATION_Y1"   : 2,
-                "Q_VCAP_CMP_TF_ATTENUATION_C0"   : 6,
-                "Q_VCAP_CMP_TF_ATTENUATION_C1"   : 2,
-                "Q_VCAP_CMP_TF_LEVEL"            : 4
+      "vcap0":{
+            "type":"vcap",
+            "cropWidth":0,
+            "cropHeight":0,
+            "cropOffsetX":0,
+            "cropOffsetY":0,
+            "stcPerOutputFrame":3000,
+            "params":{
+                "Q_VCAP_CMP_VARIABLE_FRAME_RATE":1,
+                "Q_VCAP_CMP_AV_SYNCH_ENABLE":0,
+                "Q_VCAP_CMP_STC_PER_FRAME":3000
             }
         },
-
 
         "dewarpForward": {
             "type"            : "dewarp",
-            "parent"          : "vcap0",
+            "parent"          : "nvppCH1",
             "outWidth"        : 1920,
             "outHeight"       : 1080,
             "dewarpedFrameWidth"  : 2688,
@@ -89,7 +88,7 @@
 
         "nvppCH1": {
             "type": "nvpp",
-            "parent": "dewarpForward",
+            "parent": "vcap0",
             "maxWidth": 1920,
             "maxHeight": 1080,
             "cropWidth": 0,
@@ -98,11 +97,12 @@
             "cropOffsetY": 0,
             "outWidth": 1920,
             "outHeight": 1080,
-            "stcPerOutputFrame": 3000,
+            "inputPTSInterval": 3000,
             "avcPreProc": 1,
             "params" : {
-                "Q_NVPP_CMP_VARIABLE_FRAME_RATE": 1,
-                "Q_NVPP_CMP_INITIAL_DELAY": 1
+                "Q_NVPP_CMP_VID_PASSTHROUGH":1,
+                "Q_NVPP_CMP_VARIABLE_FRAME_RATE":1,
+                "Q_NVPP_CMP_INITIAL_DELAY":1
              }
         },
 
