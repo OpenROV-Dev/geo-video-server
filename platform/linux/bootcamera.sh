@@ -35,4 +35,6 @@ else
     fi
 fi
 
-#videoDevice=$(file somefile | awk '{print $5}')
+#TODO: Move these in to the configuration files.
+mxuvc bitrate 10000000
+mxuvc gop 30
