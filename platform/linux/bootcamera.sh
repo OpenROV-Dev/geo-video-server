@@ -37,4 +37,4 @@ fi
 
 #TODO: Move these in to the configuration files.
 mxuvc bitrate 10000000
-mxuvc gop 30
+mxuvc gop 10
