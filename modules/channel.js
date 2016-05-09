@@ -58,7 +58,7 @@ var Channel = function( camera, channelNum, endpoint )
 				resolution: 		self.settings.width.toString() + "x" + self.settings.height.toString(),
 				framerate: 			self.settings.framerate,
 				videoMimeType: 		'video/mp4',
-				cameraLocation: 	"/rov/forward",
+				cameraLocation: 	"forward",
 				relativeServiceUrl: ':' + self.portNum + '/'
 			}
 		};

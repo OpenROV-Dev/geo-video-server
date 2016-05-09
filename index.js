@@ -58,8 +58,8 @@ cameraRegistrationServer.on( 'message', function( msg )
 } );
 
 // TODO: Spawn all necessary geomuxpp daemons
-// Spawn the geomuxpp daemon for video 0
 
+// Spawn the geomuxpp daemon for video 0
 var geomuxpp = spawn( 'geomuxpp', [ '0' ] );
 
 geomuxpp.stdout.on( 'data', function( data ) 
