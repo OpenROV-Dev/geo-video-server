@@ -82,6 +82,27 @@ var Camera = function( cameraOffset )
         console.error( healthStatus );
     } );
     
+    // Set up timer to request health every 5 secs
+    setInterval( function()
+    {
+        for( var channel in self.channels ) 
+        {
+            if( self.channels.hasOwnProperty( channel ) ) 
+            {
+                // Send command to request health status update
+                var command = 
+                {
+                    cmd: "chCmd",
+                    ch: channel.channelNum,
+                    chCmd: "publish_health",
+                    value: ""
+                };
+                
+                self.commandPublisher.send( [ "cmd", JSON.stringify( command ) ] );
+            }
+        }
+    })
+    
     events.EventEmitter.call(this);
 };
 
