@@ -56,6 +56,8 @@ var Camera = function( cameraOffset )
     // Channel settings
     channelSettingsSub.on( 'message', function( topic, msg )
     {
+        console.error( JSON.stringify( msg ) );
+        
         var settings = JSON.parse( msg );
         
         if( self.channels[ settings.chNum ] === undefined )
@@ -85,23 +87,20 @@ var Camera = function( cameraOffset )
     // Set up timer to request health every 5 secs
     setInterval( function()
     {
-        for( var channel in self.channels ) 
+        Object.keys( self.channels ).forEach( function(key, index)
         {
-            if( self.channels.hasOwnProperty( channel ) ) 
+            // Send command to request health status update
+            var command = 
             {
-                // Send command to request health status update
-                var command = 
-                {
-                    cmd: "chCmd",
-                    ch: channel.channelNum,
-                    chCmd: "publish_health",
-                    value: ""
-                };
-                
-                self.commandPublisher.send( [ "cmd", JSON.stringify( command ) ] );
-            }
-        }
-    })
+                cmd: "chCmd",
+                ch: self.channels[ index ].channelNum,
+                chCmd: "publish_health",
+                value: ""
+            };
+            
+            self.commandPublisher.send( [ "cmd", JSON.stringify( command ) ] );
+        } );
+    }, 5000 );
     
     events.EventEmitter.call(this);
 };

@@ -69,7 +69,7 @@ geomuxpp.stdout.on( 'data', function( data )
 
 geomuxpp.stderr.on( 'data', function( data ) 
 {
-	//console.log( data.toString() );
+	//console.error( data.toString() );
 } );
 
 geomuxpp.on( 'close', function( code ) 
