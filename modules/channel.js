@@ -50,16 +50,20 @@ var Channel = function( camera, channelNum, endpoint )
 		// Announce video source as json object on stderr
         var announcement = 
 		{ 
-			service:	'geomux',
-			port:		self.portNum,
-			addresses:	['127.0.0.1'],
-			txtRecord:
+			type: "CameraAnnouncement",
+			payload:
 			{
-				resolution: 		self.settings.width.toString() + "x" + self.settings.height.toString(),
-				framerate: 			self.settings.framerate,
-				videoMimeType: 		'video/mp4',
-				cameraLocation: 	"forward",
-				relativeServiceUrl: ':' + self.portNum + '/'
+				service:	'geomux',
+				port:		self.portNum,
+				addresses:	['127.0.0.1'],
+				txtRecord:
+				{
+					resolution: 		self.settings.width.toString() + "x" + self.settings.height.toString(),
+					framerate: 			self.settings.framerate,
+					videoMimeType: 		'video/mp4',
+					cameraLocation: 	"forward",
+					relativeServiceUrl: ':' + self.portNum + '/'
+				}
 			}
 		};
 		

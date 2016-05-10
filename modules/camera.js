@@ -72,9 +72,14 @@ var Camera = function( cameraOffset )
     // Channel health
     channelHealthSub.on( 'message', function( topic, msg )
     {
-        var health = JSON.parse( msg );
-
-        console.log( "Channel health announced " + GetCamChannelString( health.chNum ) + JSON.stringify( health ) );
+        // Wrap with a message type
+        var healthStatus = JSON.stringify( 
+        { 
+			type: "ChannelHealth",
+			payload: JSON.parse( msg )
+		} );
+		
+        console.error( healthStatus );
     } );
     
     events.EventEmitter.call(this);
