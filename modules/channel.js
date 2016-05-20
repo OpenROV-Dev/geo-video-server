@@ -1,4 +1,3 @@
-var events 	= require('events');  
 var zmq		= require('zmq');
 
 var Channel = function( camera, channelNum, endpoint )
@@ -95,8 +94,6 @@ var Channel = function( camera, channelNum, endpoint )
 	
 	self.camera.commandPublisher.send( [ "cmd", JSON.stringify( command ) ] );
 };
-
-Channel.prototype.__proto__ = events.EventEmitter.prototype;
 
 module.exports = function( camera, channelNum, endpoint ) 
 {
