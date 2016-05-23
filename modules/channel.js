@@ -51,17 +51,29 @@ var Channel = function( camera, channelNum )
 	// Listen for the init frame
 	settingsSub.on( 'message', function( topic, data )
     {
-		console.log( "ours:" + JSON.stringify( self.settings ) );
+		console.log( "Got channel settings on: " + self.channelNum );
 		
-		settings = JSON.parse( data.toString() );
-		console.log( JSON.stringify(settings) );
-		
-		console.log( "got settings" );
+		var settings = JSON.parse( data );
+
 		for(var setting in settings )
 		{
 			console.log( "updating setting: " + setting );
 			self.settings[ setting ] = settings[ setting ];
 		}
+     
+		// Wrap with a message type
+		var channelSettings = JSON.stringify( 
+		{ 
+			type: "ChannelSettings",
+			channel: self.channelNum,
+			payload: settings
+		} );
+		
+		// Report settings to cockpit
+		console.error( channelSettings );
+		
+		// Store the current settings locally
+		self.channels[ settings.chNum ].settings = settings.settings;
 	} );
 	
 	// Set up event listener
@@ -69,10 +81,26 @@ var Channel = function( camera, channelNum )
 	healthSub.connect( this.eventEndpoint );
 	healthSub.subscribe( "health" );
 	
-	// Listen for the init frame
+	// Listen for the health messages
 	healthSub.on( 'message', function( topic, data )
     {
-		console.log( "got health: " + data.toString() );
+		console.log( "Got health on: " + self.channelNum );
+		
+		var health = JSON.parse( data );
+     
+		// Wrap with a message type
+		var jHealth = JSON.stringify( 
+		{ 
+			type: "ChannelHealth",
+			channel: self.channelNum,
+			payload: settings
+		} );
+		
+		// Report settings to cockpit
+		console.error( channelSettings );
+		
+		// Store the current settings locally
+		self.channels[ settings.chNum ].settings = settings.settings;
 	} );
 	
 	setInterval( function()
@@ -122,7 +150,8 @@ var Channel = function( camera, channelNum )
 		// Announce video source as json object on stderr
         var announcement = 
 		{ 
-			type: "CameraAnnouncement",
+			type: "ChannelAnnouncement",
+			channel: self.channelNum,
 			payload:
 			{
 				service:	'geomux',
@@ -157,61 +186,11 @@ var Channel = function( camera, channelNum )
 	} );
 	
 	
-    // // Channel settings
-    // channelSettingsSub.on( 'message', function( topic, msg )
-    // {
-    //     var settings = JSON.parse( msg );
-       
-    //     if( self.channels[ settings.chNum ] === undefined )
-    //     {
-    //         console.log( "Settings received for non-existent channel" );
-    //     }
-    //     else
-    //     {
-    //         console.log( "Got channel settings " + GetCamChannelString( settings.chNum ) );
-            
-    //         // Wrap with a message type
-    //         var channelSettings = JSON.stringify( 
-    //         { 
-    //             type: "ChannelSettings",
-    //             payload: settings
-    //         } );
-            
-    //         // Report settings to cockpit
-    //         console.error( channelSettings );
-            
-    //         // Store the current settings locally
-    //         self.channels[ settings.chNum ].settings = settings.settings;
-    //     }
-    // } );
-    
-    // // Channel health
-    // channelHealthSub.on( 'message', function( topic, msg )
-    // {
-    //     var health = JSON.parse( msg );
+    // Channel settings
+    channelSettingsSub.on( 'message', function( topic, msg )
+    {
         
-    //     if( self.channels[ health.chNum ] === undefined )
-    //     {
-    //         console.log( "Health received for non-existent channel" );
-    //     }
-    //     else
-    //     {
-    //         console.log( "Got channel health " + GetCamChannelString( health.chNum ) );
-            
-    //         // Wrap with a message type
-    //         var healthStatus = JSON.stringify( 
-    //         { 
-    //             type: "ChannelHealth",
-    //             payload: JSON.parse( msg )
-    //         } );
-            
-    //         // Report health to cockpit
-    //         console.error( healthStatus );
-            
-    //         // Store the current settings locally
-    //         self.channels[ health.chNum ].health = health.stats;
-    //     }
-    // } );
+    } );
 };
 util.inherits(Channel, EventEmitter);
 
