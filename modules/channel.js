@@ -20,7 +20,7 @@ var Channel = function( camera, channelNum )
 	
 	// Generate a port number for this channel
 	this.portNum 	= 8099 + ( 10 * this.cameraNum ) + this.channelNum;
-	this.io 		= require('socket.io')( this.portNum );
+	this.io 		= require('socket.io')( this.portNum, { path: '/geovideo' + channelNum } );
 	
 	// Set up event listener
 	var apiSub = zmq.socket( 'sub' );
@@ -30,6 +30,8 @@ var Channel = function( camera, channelNum )
 	// Listen for the init frame
 	apiSub.on( 'message', function( topic, data )
     {
+		console.log( "Got api on: " + self.channelNum );
+		
 		// Finally, tell the daemon to start this channel
 		var command = 
 		{
@@ -73,7 +75,7 @@ var Channel = function( camera, channelNum )
 		console.error( channelSettings );
 		
 		// Store the current settings locally
-		self.channels[ settings.chNum ].settings = settings.settings;
+		self.settings = settings;
 	} );
 	
 	// Set up event listener
@@ -93,14 +95,11 @@ var Channel = function( camera, channelNum )
 		{ 
 			type: "ChannelHealth",
 			channel: self.channelNum,
-			payload: settings
+			payload: health
 		} );
 		
-		// Report settings to cockpit
-		console.error( channelSettings );
-		
-		// Store the current settings locally
-		self.channels[ settings.chNum ].settings = settings.settings;
+		// Report health to cockpit
+		console.error( jHealth );
 	} );
 	
 	setInterval( function()
@@ -129,6 +128,8 @@ var Channel = function( camera, channelNum )
 	// Listen for the init frame
 	initFrameSub.on( 'message', function( topic, data )
     {
+		console.log( "Got init on: " + self.channelNum );
+		
 		self.initFrame = data;
 		
 		// Handle connections
@@ -163,7 +164,8 @@ var Channel = function( camera, channelNum )
 					framerate: 			self.settings.framerate,
 					videoMimeType: 		'video/mp4',
 					cameraLocation: 	"forward",
-					relativeServiceUrl: ':' + self.portNum + '/'
+					relativeServiceUrl: ':' + self.portNum + '/',  
+					wspath: 			'/geovideo' + channelNum   
 				}
 			}
 		};

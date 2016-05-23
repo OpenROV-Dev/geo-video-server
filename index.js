@@ -78,7 +78,7 @@ exec( init_camera_script, function( err, stdout, stderr )
 
 	geomuxpp.stderr.on( 'data', function( data ) 
 	{
-		//console.error( data.toString() );
+		//console.error( "GEOMUXPP ERROR: " + data.toString() );
 	} );
 
 	geomuxpp.on( 'close', function( code ) 
