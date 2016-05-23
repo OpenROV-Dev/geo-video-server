@@ -184,13 +184,6 @@ var Channel = function( camera, channelNum )
             console.error( jannouncement );
         }, 5000 );
 	} );
-	
-	
-    // Channel settings
-    channelSettingsSub.on( 'message', function( topic, msg )
-    {
-        
-    } );
 };
 util.inherits(Channel, EventEmitter);
 
