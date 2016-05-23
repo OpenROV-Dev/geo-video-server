@@ -21,6 +21,8 @@ var init_camera_script = __dirname + "/platform/linux/bootcamera.sh";
 
 // TODO: Find and initialize all available cameras
 
+console.log( "Launching init script: " + init_camera_script );
+
 // Execute the init script, then set up the camera interfaces
 exec( init_camera_script, function( err, stdout, stderr ) 
 {
@@ -33,6 +35,8 @@ exec( init_camera_script, function( err, stdout, stderr )
 		throw err;
 	}
 	
+	console.log( "Init script successful" );
+	
 	var cameras = {};
 
 	// Setup ZMQ camera registration REQ/REP 
@@ -41,16 +45,26 @@ exec( init_camera_script, function( err, stdout, stderr )
 	cameraRegistrationServer.bind( "ipc:///tmp/geomux_registration.ipc" );
 	cameraRegistrationServer.on( 'message', function( msg )
 	{
-		cameraRegistration = JSON.parse( msg );
+		registration = JSON.parse( msg );
 		
-		console.log( "Camera came online: [" + cameraRegistration.offset + "]" );
+		if( registration.type === "camera_registration" )
+		{
+			if( cameras[ registration.camera ] !== undefined )
+			{
+				delete( cameras[ registration.camera ] );
+			}
+			
+			console.log( "Camera came online: [" + registration.camera + "]" );
 		
-		// Create a camera
-		cameras[ cameraRegistration.offset ] = require( "camera.js" )( cameraRegistration.offset );
-		
-		// Tell the daemon that it is good to go
-		cameraRegistrationServer.send( JSON.stringify( { "response": 1 } ) );
+			// Create a camera
+			cameras[ registration.camera ] = require( "camera.js" )( registration.camera, cameraRegistrationServer );
+			
+			// Tell the daemon that it is good to go
+			cameraRegistrationServer.send( JSON.stringify( { "response": 1 } ) );
+		}
 	} );
+
+	console.log( "Spawning geomux" );
 
 	// TODO: Spawn all necessary geomuxpp daemons for each camera
 	// Spawn the geomuxpp daemon for video 0
