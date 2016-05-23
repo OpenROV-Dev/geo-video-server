@@ -24,22 +24,25 @@ then
     echo 'Booting camera'
     mxcam boot $DIR/../../firmware/gc6500_ddrboot_fw.gz.img $DIR/../../geoconf/ov4689_H264_1080p30.json
     
-    sleep 1
+    sleep 5
+    
+    # TODO: Wait until booted
+    echo 'Camera booted'
 else
     echo 'Camera already booted'
-    mxcam bootmode | grep -qc 'snor'
+    # mxcam bootmode | grep -qc 'snor'
     
-    sleep 1
-    bootmodesnor=$?
-    if [ $bootmodesnor -eq 0 ]
-    then
-      echo 'Camera is factor SNOR mode, changing to USB boot'
-     mxcam flash --bootloader --silent $DIR/../../firmware/gc6500_btld_ddrboot_534_epwr.rom
+    # sleep 1
+    # bootmodesnor=$?
+    # if [ $bootmodesnor -eq 0 ]
+    # then
+    #   echo 'Camera is factor SNOR mode, changing to USB boot'
+    #  mxcam flash --bootloader --silent $DIR/../../firmware/gc6500_btld_ddrboot_534_epwr.rom
      
-     sleep 1
-     mxcam boot $DIR/../../firmware/gc6500_ddrboot_fw.gz.img $DIR/../../geoconf/ov4689_H264_1080p30.json
-     sleep 1
-    fi
+    #  sleep 1
+    #  mxcam boot $DIR/../../firmware/gc6500_ddrboot_fw.gz.img $DIR/../../geoconf/ov4689_H264_1080p30.json
+    #  sleep 1
+    # fi
 fi
 
 #TODO: Move these in to the configuration files.
