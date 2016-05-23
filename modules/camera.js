@@ -1,43 +1,52 @@
-var events = require('events');  
-const glob = require("glob");
+var zmq		        = require('zmq');
+var EventEmitter    = require('events').EventEmitter;
+var util            = require('util');
 
-var Camera = function(){
-  var exec = require('child_process').exec;
-  var fs = require('fs');
-
-  var mxcam_command = "mxcam";
-  var mxuvc_command = "mxuvc";
-  var init_camera_script = __dirname +"/../platform/linux/bootcamera.sh";
+var Camera = function( cameraOffset, regServer )
+{
+    EventEmitter.call(this);
     
-  this.video = null;
-  this.status = 'initializing';
+    var self                = this;
+    this.offset             = cameraOffset;
+    this.channels           = {};
+    
+    var registrationServer = regServer;
+    
+    // Helper function
+    var GetCamChannelString = function( channelNum )
+    {
+        return ( "[" + self.offset + "][" + channelNum + "]: " );
+    };
+    
+    /////////////
+    // Set up channel status subscribers
+    this.commandPublisher   = zmq.socket( 'pub' );  // Sends commands to geomuxpp
+ 
+    // Connect ZMQ sockets
+    this.commandPublisher.connect( "ipc:///tmp/geomux_command" + self.offset + ".ipc" );
 
-  events.EventEmitter.call(this);
-  var self=this;
-  var child = exec(init_camera_script, function(err, stdout, stderr) {
-      if (err) {
-        console.log(stderr);
-        console.log(stdout);
-        console.dir(err);
-        throw err;
-        //TODO: handle the 1004 exit code: No Geo Camera found
-      };
-      var _this = self;
-      glob("/dev/v4l/by-id/usb-GEO_Semi_Condor*", function (er, files) {
-          if (er) throw er;
-          
-      // At the moment the system assumes /dev/video0.  We actually
-      // need to determine which concern needs to pick the actual camera
-      // to stream, assuming more than one Geo Camera.
-      _this.video = require("geomux");
-      _this.status = 'ready';
-      _this.emit('ready');
+    // Channel registrations
+    registrationServer.on( 'message', function( msg )
+	{
+        var registration = JSON.parse( msg );
 
-      });      
-  });  
-  
-}
+        if( registration.type === "channel_registration" )
+		{
+			console.log( "Channel[" + registration.channel + "] added on camera [" + registration.camera + "]" );
+		
+			// Create a channel object
+            self.channels[ registration.channel ] = require( "channel.js" )( self, registration.channel );
+			
+			// Tell the daemon that it is good to go
+			registrationServer.send( JSON.stringify( { "response": 1 } ) );
+            
+            self.channels[ registration.channel ].emit( "start_video" );
+		}
+    } );
+};
+util.inherits(Camera, EventEmitter);
 
-Camera.prototype.__proto__ = events.EventEmitter.prototype;
-
-module.exports=new Camera();
+module.exports = function( cameraOffset, regServer ) 
+{
+    return new Camera( cameraOffset, regServer );
+};

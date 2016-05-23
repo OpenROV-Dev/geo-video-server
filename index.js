@@ -1,86 +1,90 @@
 #!/usr/bin/env node
-//To eliminate hard coding paths for require, we are modifying the NODE_PATH to include
-//out lib folder
+
+// To eliminate hard coding paths for require, we are modifying the NODE_PATH to include our lib folder
 var oldpath = '';
-if (process.env['NODE_PATH']!==undefined){
-  oldpath = process.env['NODE_PATH'];
+
+if( process.env[ 'NODE_PATH' ] !== undefined )
+{
+    oldpath = process.env[ 'NODE_PATH' ];
 }
-//just in case already been set leave it alone
-process.env['NODE_PATH']=__dirname+'/modules:'+oldpath;
+
+// Append modules directory to path
+process.env['NODE_PATH'] = __dirname + '/modules:' + oldpath;
 require('module').Module._initPaths();
-console.log("Set NODE_PATH to: "+process.env['NODE_PATH'] );
 
-var videoServer;
-var fs = require('fs');
-var options={'writeToDisk' : false};
+var spawn 	= require('child_process').spawn;
+var exec 	= require('child_process').exec;
+var fs 		= require('fs');
+var zmq		= require('zmq');
 
-var getOptions = function getOptions(args){
-    var defaults = {
-        location: process.env.GEO_LOCATION || "forward",
-        port: process.env.GEO_PORT || 8099,
-        fps: process.env.GEO_FPS || 30,
-        mimeType: process.env.GEO_MIMETYPE || 'video/mp4',
-        resolution: process.env.GEO_RESOLUTION || '1920x1080',
-        device: process.env.GEO_DEVICE || '/dev/video0',
-        url: process.env.GEO_URL || ':'+8099+'/',
-        mock: process.env.GEO_MOCK || false,
-        wspath: process.env.GEO_WSPATH || '/socket.io',
-    };
-    var argv = require('minimist')(args);
-    return Object.assign(defaults,argv);
-}
+var init_camera_script = __dirname + "/platform/linux/bootcamera.sh";
 
+// TODO: Find and initialize all available cameras
 
+console.log( "Launching init script: " + init_camera_script );
 
-options = getOptions(process.argv.slice(2));
+// Execute the init script, then set up the camera interfaces
+exec( init_camera_script, function( err, stdout, stderr ) 
+{
+	if( err ) 
+	{
+		console.log( stderr );
+		console.log( stdout );
+		console.dir( err );
 
-var io = require('socket.io')(8099,{path:options.wspath});
+		throw err;
+	}
+	
+	console.log( "Init script successful" );
+	
+	var cameras = {};
 
+	// Setup ZMQ camera registration REQ/REP 
+	var cameraRegistrationServer = zmq.socket( 'rep' );
 
-var camera
-if (options.mock){
-  camera = require("mock-camera.js");
-}else{
-  camera = require("camera.js");
-}
-var beacon_timer = null;
-console.log('listening to ready');
-camera.on('ready',function(){
-    console.log('got ready');
-    var deps = {};
-    deps.video = camera.video;
+	cameraRegistrationServer.bind( "ipc:///tmp/geomux_registration.ipc" );
+	cameraRegistrationServer.on( 'message', function( msg )
+	{
+		registration = JSON.parse( msg );
+		
+		if( registration.type === "camera_registration" )
+		{
+			if( cameras[ registration.camera ] !== undefined )
+			{
+				delete( cameras[ registration.camera ] );
+			}
+			
+			console.log( "Camera came online: [" + registration.camera + "]" );
+		
+			// Create a camera
+			cameras[ registration.camera ] = require( "camera.js" )( registration.camera, cameraRegistrationServer );
+			
+			// Tell the daemon that it is good to go
+			cameraRegistrationServer.send( JSON.stringify( { "response": 1 } ) );
+		}
+	} );
 
-    deps.socketIOclient = io;
-    var stream;
+	console.log( "Spawning geomux" );
 
-    camera.video.videoStream.on('initData', function(data){
-        console.log("got init data");
-        deps.video.initFrame = data;
+	// TODO: Spawn all necessary geomuxpp daemons for each camera
+	// Spawn the geomuxpp daemon for video 0
+	var geomuxpp = spawn( 'geomuxpp', [ '0' ] );
 
-        //The stream is up and running now.
-        videoServer = require('videoServer')(deps);
-        //announce via json on stderr
-        var announcement = {service:'geomux',port:options.port,addresses:['127.0.0.1'],txtRecord:{resolution: options.resolution, framerate: options.framerate, videoMimeType: 'video/mp4', cameraLocation: options.location, relativeServiceUrl:options.url}};
-        var jannouncement =  JSON.stringify(announcement);
-        console.error(jannouncement);
-        if (beacon_timer !== null){
-          clearInterval(beacon_timer);
-        }
-        setInterval(function(){
-            console.error(jannouncement);
-        },5000);
+	// Optionally listen to geomuxpp standard IO
+	geomuxpp.stdout.on( 'data', function( data ) 
+	{
+		//console.log( data.toString() );
+	} );
 
-        if (options.writeToDisk){
-            //Todo: Verify the async writes preserve order. First test appeared to be a corrupt stream.  Could also simply need to have encoding set.
-            stream = fs.createWriteStream("/tmp/video.mp4");
-            stream.write(data);
-        }
-    });
+	geomuxpp.stderr.on( 'data', function( data ) 
+	{
+		//console.error( data.toString() );
+	} );
 
-    camera.video.videoStream.on('data', function(data){
-        if (stream!==undefined){
-            stream.write(data);
-        };
-    });
-
+	geomuxpp.on( 'close', function( code ) 
+	{
+		console.log( "geomuxpp exited with code: " + code );
+	} );
+	
 });
+
