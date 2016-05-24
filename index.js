@@ -12,18 +12,31 @@ if( process.env[ 'NODE_PATH' ] !== undefined )
 process.env['NODE_PATH'] = __dirname + '/modules:' + oldpath;
 require('module').Module._initPaths();
 
-var spawn 	= require('child_process').spawn;
-var exec 	= require('child_process').exec;
-var fs 		= require('fs');
-var zmq		= require('zmq');
+var defaults = 
+{
+	location: 	process.env.GEO_LOCATION || "forward",
+	port: 		process.env.GEO_PORT || 8099,
+	device: 	process.env.GEO_DEVICE || '0',
+	url: 		process.env.GEO_URL || ':' + ( process.env.GEO_PORT || 8099 ) + '/',
+	wspath: 	process.env.GEO_WSPATH || '/geovideo',
+};
 
-var init_camera_script = __dirname + "/platform/linux/bootcamera.sh";
+var spawn 		= require('child_process').spawn;
+var exec 		= require('child_process').exec;
+var fs 			= require('fs');
+var zmq			= require('zmq');
+var io 			= require('socket.io')( defaults.port, { path: defaults.wspath } );
 
-// TODO: Find and initialize all available cameras
+var deps = 
+{
+	plugin: io,
+	defaults: defaults
+}
 
-console.log( "Launching init script: " + init_camera_script );
+var init_camera_script 	= __dirname + "/platform/linux/bootcamera.sh";
 
 // Execute the init script, then set up the camera interfaces
+// TODO: Find and initialize all available cameras, not just video0
 exec( init_camera_script, function( err, stdout, stderr ) 
 {
 	if( err ) 
@@ -35,56 +48,78 @@ exec( init_camera_script, function( err, stdout, stderr )
 		throw err;
 	}
 	
-	console.log( "Init script successful" );
+	// TODO: Return value of camera script should be list of successfully booted cameras
+	// Temporarily, we just put camera 0 in there
+	var bootedCameras = [ defaults.device ];
 	
 	var cameras = {};
 
 	// Setup ZMQ camera registration REQ/REP 
-	var cameraRegistrationServer = zmq.socket( 'rep' );
+	var regServer = zmq.socket( 'rep' );
 
-	cameraRegistrationServer.bind( "ipc:///tmp/geomux_registration.ipc" );
-	cameraRegistrationServer.on( 'message', function( msg )
+	// Listen for camera and channel registrations over ZeroMQ
+	regServer.bind( "ipc:///tmp/geomux_registration.ipc" );
+	regServer.on( 'message', function( msg )
 	{
-		registration = JSON.parse( msg );
-		
-		if( registration.type === "camera_registration" )
-		{
-			if( cameras[ registration.camera ] !== undefined )
-			{
-				delete( cameras[ registration.camera ] );
-			}
-			
-			console.log( "Camera came online: [" + registration.camera + "]" );
-		
-			// Create a camera
-			cameras[ registration.camera ] = require( "camera.js" )( registration.camera, cameraRegistrationServer );
-			
-			// Tell the daemon that it is good to go
-			cameraRegistrationServer.send( JSON.stringify( { "response": 1 } ) );
-		}
-	} );
+		try
+        {
+            var registration = JSON.parse( msg );
 
-	console.log( "Spawning geomux" );
-
-	// TODO: Spawn all necessary geomuxpp daemons for each camera
-	// Spawn the geomuxpp daemon for video 0
-	var geomuxpp = spawn( 'geomuxpp', [ '0' ] );
-
-	// Optionally listen to geomuxpp standard IO
-	geomuxpp.stdout.on( 'data', function( data ) 
-	{
-		//console.log( data.toString() );
-	} );
-
-	geomuxpp.stderr.on( 'data', function( data ) 
-	{
-		//console.error( "GEOMUXPP ERROR: " + data.toString() );
-	} );
-
-	geomuxpp.on( 'close', function( code ) 
-	{
-		console.log( "geomuxpp exited with code: " + code );
+            if( registration.type === "camera_registration" )
+            {
+                // Create a channel object
+                cameras[ registration.camera ] = require( "camera.js" )( registration.camera, deps );
+                
+                // Send registration success to daemon
+                regServer.send( JSON.stringify( { "response": 1 } ) );
+            }
+			else if( registration.type === "channel_registration" )
+            {
+                // Create a channel object
+                cameras[ registration.camera ].emit( "channel_registration", registration.channel, function()
+				{
+					// Send registration success to daemon
+                	regServer.send( JSON.stringify( { "response": 1 } ) );
+				} );
+            }
+        }
+        catch( err )
+        {
+            // Send registration failure to daemon
+            regServer.send( JSON.stringify( { "response": 0 } ) );
+        }
 	} );
 	
+	// Listen for camera commands and route them to the correct camera
+    plugin.on( "geomux.command", function( camera, command, params )
+    {
+		if( cameras[ camera ] !== undefined )
+		{
+			cameras[ camera ].emit( "command", command, params );
+		}
+    } );
+
+	// Start a geomuxpp daemon for each booted camera
+	bootedCameras.map( function( camera ) 
+	{
+		// Spawn the geomuxpp daemon for video 0
+		var geomuxpp = spawn( 'geomuxpp', [ camera ] );
+
+		// Optionally listen to geomuxpp standard IO
+		geomuxpp.stdout.on( 'data', function( data ) 
+		{
+			//console.log( data.toString() );
+		} );
+
+		geomuxpp.stderr.on( 'data', function( data ) 
+		{
+			//console.error( "GEOMUXPP ERROR: " + data.toString() );
+		} );
+
+		geomuxpp.on( 'close', function( code ) 
+		{
+			console.log( "geomuxpp exited with code: " + code );
+		} );
+	} );
 });
 

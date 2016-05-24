@@ -5,135 +5,111 @@ var util            = require('util');
 var Channel = function( camera, channelNum )
 {
 	EventEmitter.call(this);
+	var self 			= this;
 	
-	var self 		= this;
-	this.camera 	= camera;
-	this.cameraNum 	= parseInt( camera.offset );
-	this.channelNum = channelNum;
-	this.initFrame 	= {};
-	this.settings	= {};
+	var channelPostfix	= camera.offset + "_" + channelNum;
+	var plugin			= camera.deps.plugin;
+	var defaults 		= camera.defaults;
+
+	var videoStarted	= false;
+	var beaconTimer 	= null;
+
+	var videoEndpoint	= "ipc:///tmp/geomux_video" + cameraOffset + "_" + channelNum + ".ipc";
+	var eventEndpoint	= "ipc:///tmp/geomux_event" + cameraOffset + "_" + channelNum + ".ipc";
+
+	this.initFrame 		= {};
+	this.settings		= {};
+	this.api			= {};
+
+	// Create video socket
+	var videoSocket		= require('socket.io')( defaults.port, { path: defaults.wspath + channelPostfix + "_video" } );
 	
-	this.videoEndpoint	= "ipc:///tmp/geomux_video" + camera.offset + "_" + channelNum + ".ipc";
-	this.eventEndpoint	= "ipc:///tmp/geomux_event" + camera.offset + "_" + channelNum + ".ipc";
-	
-	var beaconTimer = null;
-	
-	// Generate a port number for this channel
-	this.portNum 	= 8099 + ( 10 * this.cameraNum ) + this.channelNum;
-	this.io 		= require('socket.io')( this.portNum, { path: '/geovideo' + channelNum } );
-	
-	// Set up event listener
+	// Set up api event listener
 	var apiSub = zmq.socket( 'sub' );
-	apiSub.connect( this.eventEndpoint );
+	apiSub.connect( eventEndpoint );
 	apiSub.subscribe( "api" );
 	
-	// Listen for the init frame
-	apiSub.on( 'message', function( topic, data )
-    {
-		console.log( "Got api on: " + self.channelNum );
-		
-		// Finally, tell the daemon to start this channel
-		var command = 
-		{
-			cmd: "chCmd",
-			ch: self.channelNum,
-			chCmd: "video_start",
-			params: ""
-		};
-
-		console.log( "start" );
-		self.camera.commandPublisher.send( [ "cmd", JSON.stringify( command ) ] );
-	} );
-	
-	// Set up event listener
+	// Set up settings event listener
 	var settingsSub = zmq.socket( 'sub' );
-	settingsSub.connect( this.eventEndpoint );
+	settingsSub.connect( eventEndpoint );
 	settingsSub.subscribe( "settings_update" );
 	
-	// Listen for the init frame
+	// Set up health event listener
+	var healthSub = zmq.socket( 'sub' );
+	healthSub.connect( eventEndpoint );
+	healthSub.subscribe( "health" );
+	
+	// Set up video data subscribers
+	var initFrameSub = zmq.socket( 'sub' );
+	initFrameSub.connect( videoEndpoint );
+	initFrameSub.subscribe( "i" );
+	
+	var dataFrameSub = zmq.socket( 'sub' );
+	dataFrameSub.connect( videoEndpoint );
+	dataFrameSub.subscribe( "v" );
+	
+	// -------------------
+	// Event listeners
+    this.on( "command", function( command, params )
+    {
+		SendChannelCommand( command, params );
+    } );
+	
+	apiSub.on( 'message', function( topic, data )
+    {
+		var api = JSON.parse( data );
+		
+		// Report the API to plugin
+		plugin.emit( "geomux.channel.api", camera.offset, channelNum, api );
+		
+		// Update our local api
+		self.api = api;
+		
+		// TODO: Load stored settings for this camera, or load them from currently selected settings profile in cockpit
+		// Set some initial settings
+		SendChannelCommand( "apply_settings", 
+		{
+			"bitrate": 		{ "value": 2000000 },
+			"goplen": 		{ "value": 10 },
+			"pict_timing": 	{ "enabled": true },
+			"vui":			{ "enabled": true },
+		} ); 
+		
+		// Now that we have the API, we can start the video
+		// TODO: Have plugin tell us when to start
+		SendChannelCommand( "video_start" );
+	} );
+
 	settingsSub.on( 'message', function( topic, data )
     {
-		console.log( "Got channel settings on: " + self.channelNum );
-		
 		var settings = JSON.parse( data );
 
+		// Update our local settings store
 		for(var setting in settings )
 		{
-			console.log( "updating setting: " + setting );
 			self.settings[ setting ] = settings[ setting ];
 		}
      
-		// Wrap with a message type
-		var channelSettings = JSON.stringify( 
-		{ 
-			type: "ChannelSettings",
-			channel: self.channelNum,
-			payload: settings
-		} );
-		
-		// Report settings to cockpit
-		console.error( channelSettings );
+	 	// Report the settings to plugin
+		plugin.emit( "geomux.channel.settings", camera.offset, channelNum, settings );
 		
 		// Store the current settings locally
 		self.settings = settings;
 	} );
 	
-	// Set up event listener
-	var healthSub = zmq.socket( 'sub' );
-	healthSub.connect( this.eventEndpoint );
-	healthSub.subscribe( "health" );
-	
-	// Listen for the health messages
 	healthSub.on( 'message', function( topic, data )
     {
-		console.log( "Got health on: " + self.channelNum );
-		
-		var health = JSON.parse( data );
-     
-		// Wrap with a message type
-		var jHealth = JSON.stringify( 
-		{ 
-			type: "ChannelHealth",
-			channel: self.channelNum,
-			payload: health
-		} );
-		
-		// Report health to cockpit
-		console.error( jHealth );
+		// Report health stats to plugin
+		plugin.emit( "geomux.channel.settings", camera.offset, channelNum, JSON.parse( data ) );
 	} );
-	
-	setInterval( function()
-	{
-		// Finally, tell the daemon to start this channel
-		var command = 
-		{
-			cmd: "chCmd",
-			ch: self.channelNum,
-			chCmd: "report_health",
-			params: ""
-		};
-
-		self.camera.commandPublisher.send( [ "cmd", JSON.stringify( command ) ] );
-	}, 5000 );
-	
-	// Set up video data subscribers
-	var initFrameSub = zmq.socket( 'sub' );
-	initFrameSub.connect( this.videoEndpoint );
-	initFrameSub.subscribe( "i" );
-	
-	var dataFrameSub = zmq.socket( 'sub' );
-	dataFrameSub.connect( this.videoEndpoint );
-	dataFrameSub.subscribe( "v" );
 	
 	// Listen for the init frame
 	initFrameSub.on( 'message', function( topic, data )
     {
-		console.log( "Got init on: " + self.channelNum );
-		
 		self.initFrame = data;
 		
 		// Handle connections
-		self.io.on('connect',function(client)
+		videoSocket.on('connect',function(client)
 		{
 			client.on('request_Init_Segment', function(fn) 
 			{
@@ -145,51 +121,72 @@ var Channel = function( camera, channelNum )
 		dataFrameSub.on( 'message', function( topic, data )
 		{
 			// Forward packets over socket.io
-			self.io.compress(false).volatile.emit( 'x-h264-video.data', data );
+			videoSocket.compress(false).volatile.emit( 'x-h264-video.data', data );
 		} );
 		
 		// Announce video source as json object on stderr
         var announcement = 
 		{ 
-			type: "ChannelAnnouncement",
-			channel: self.channelNum,
-			payload:
+			service:	'geomux',
+			port:		defaults.port,
+			addresses:	['127.0.0.1'],
+			txtRecord:
 			{
-				service:	'geomux',
-				port:		self.portNum,
-				addresses:	['127.0.0.1'],
-				txtRecord:
-				{
-					resolution: 		self.settings.width.toString() + "x" + self.settings.height.toString(),
-					framerate: 			self.settings.framerate,
-					videoMimeType: 		'video/mp4',
-					cameraLocation: 	"forward",
-					relativeServiceUrl: ':' + self.portNum + '/',  
-					wspath: 			'/geovideo' + channelNum   
-				}
+				resolution: 		self.settings.width.toString() + "x" + self.settings.height.toString(),
+				framerate: 			self.settings.framerate,
+				videoMimeType: 		'video/mp4',
+				cameraLocation: 	defaults.location,
+				relativeServiceUrl: defaults.url,  
+				wspath: 			defaults.wspath + channelPostfix + "_video"
 			}
 		};
 		
-        var jannouncement = JSON.stringify( announcement );
-		
-        console.error( jannouncement );
+		plugin.emit( "geomux.channel.announcement", camera.offset, channelNum, announcement );
 		
 		// Create interval timer
         if( beaconTimer !== null )
 		{
-          clearInterval( beaconTimer );
+			clearInterval( beaconTimer );
         }
 		
 		// Announce camera endpoint every 5 secs
         setInterval( function()
 		{
-            console.error( jannouncement );
-        }, 5000 );
+			plugin.emit( "geomux.channel.announcement", camera.offset, channelNum, announcement );
+		}, 5000 );
 	} );
+	
+	// ----------------
+	// Intervals
+	
+	// Ask geomuxpp for health reports every 5 secs
+	setInterval( function()
+	{
+		SendChannelCommand( "report_health" );
+	}, 5000 );
+	
+	// ----------------
+	// Helper functions
+	
+	function SendChannelCommand( command, params )
+	{
+		// Send channel command over zeromq to geomuxpp
+		camera.commandPublisher.send( 
+		[ 
+			"cmd",
+			JSON.stringify(
+			{
+				cmd: 	"chCmd",
+				ch: 	channelNum,
+				chCmd: 	command,
+				params: params
+			} ) 	
+		] );
+	};
 };
 util.inherits(Channel, EventEmitter);
 
-module.exports = function( camera, channelNum, endpoint ) 
+module.exports = function( camera, channelNum ) 
 {
-  	return new Channel( camera, channelNum, endpoint );
+  	return new Channel( camera, channelNum );
 };
