@@ -121,7 +121,7 @@ var Channel = function( camera, channelNum )
 	healthSub.on( 'message', function( topic, data )
     {
 		// Report health stats to plugin
-		plugin.emit( "geomux.channel.settings", camera.offset, channelNum, JSON.parse( data ) );
+		plugin.emit( "geomux.channel.health", camera.offset, channelNum, JSON.parse( data ) );
 	} );
 	
 	// Listen for the init frame
