@@ -22,13 +22,12 @@ var defaults =
 };
 
 var spawn 		= require('child_process').spawn;
-var exec 		= require('child_process').exec;
-var fs 			= require('fs');
 var zmq			= require('zmq');
 var io			= require('socket.io')( defaults.port );
 var plugin		= io.of( defaults.wspath );
 var log       	= require('debug')( 'app:log' );
 var error		= require('debug')( 'app:error' );
+var argv 		= require('minimist')( process.argv );
 
 var deps = 
 {
@@ -37,103 +36,87 @@ var deps =
 	defaults: defaults
 }
 
-var init_camera_script 	= __dirname + "/platform/linux/bootcamera.sh";
+// Get the list of the cameras to connect to
+var bootedCameras = argv.c.split( ',' );
 
-// Execute the init script, then set up the camera interfaces
-// TODO: Find and initialize all available cameras, not just video0
-exec( init_camera_script, function( err, stdout, stderr ) 
+var cameras = {};
+
+// Setup ZMQ camera registration REQ/REP 
+var regServer = zmq.socket( 'rep' );
+
+// Listen for camera and channel registrations over ZeroMQ
+regServer.bind( "ipc:///tmp/geomux_registration.ipc" );
+regServer.on( 'message', function( msg )
 {
-	if( err ) 
+	try
 	{
-		error( stderr );
-		error.dir( err );
-		log( stdout );
-		
-		throw err;
-	}
-	
-	// TODO: Return value of camera script should be list of successfully booted cameras
-	// Temporarily, we just put camera 0 in there
-	var bootedCameras = [ defaults.device ];
-	
-	var cameras = {};
+		var registration = JSON.parse( msg );
 
-	// Setup ZMQ camera registration REQ/REP 
-	var regServer = zmq.socket( 'rep' );
-
-	// Listen for camera and channel registrations over ZeroMQ
-	regServer.bind( "ipc:///tmp/geomux_registration.ipc" );
-	regServer.on( 'message', function( msg )
-	{
-		try
-        {
-            var registration = JSON.parse( msg );
-
-            if( registration.type === "camera_registration" )
-            {
-				log( "Camera registration request: " + registration.camera );
-				
-                // Create a channel object
-                cameras[ registration.camera ] = require( "camera.js" )( registration.camera, deps );
-				
-				log( "Camera " + registration.camera + " registered" );
-				
-                // Send registration success to daemon
-                regServer.send( JSON.stringify( { "response": 1 } ) );
-            }
-			else if( registration.type === "channel_registration" )
-            {
-				log( "Channel registration request: " + registration.camera + "_" + registration.channel );
-				
-                // Create a channel object
-                cameras[ registration.camera ].emit( "channel_registration", registration.channel, function()
-				{					
-					log( "Channel " + registration.camera + "_" + registration.channel + " registered" );
-					
-					// Send registration success to daemon
-                	regServer.send( JSON.stringify( { "response": 1 } ) );
-				} );
-            }
-        }
-        catch( err )
-        {
-			error( "Error in registration: " + err );
+		if( registration.type === "camera_registration" )
+		{
+			log( "Camera registration request: " + registration.camera );
 			
-            // Send registration failure to daemon
-            regServer.send( JSON.stringify( { "response": 0 } ) );
-        }
-	} );
-	
-	// Listen for camera commands and route them to the correct camera
-    plugin.on( "geomux.command", function( camera, command, params )
-    {
-		if( cameras[ camera ] !== undefined )
-		{
-			cameras[ camera ].emit( "command", command, params );
+			// Create a channel object
+			cameras[ registration.camera ] = require( "camera.js" )( registration.camera, deps );
+			
+			log( "Camera " + registration.camera + " registered" );
+			
+			// Send registration success to daemon
+			regServer.send( JSON.stringify( { "response": 1 } ) );
 		}
-    } );
-
-	// Start a geomuxpp daemon for each booted camera
-	bootedCameras.map( function( camera ) 
+		else if( registration.type === "channel_registration" )
+		{
+			log( "Channel registration request: " + registration.camera + "_" + registration.channel );
+			
+			// Create a channel object
+			cameras[ registration.camera ].emit( "channel_registration", registration.channel, function()
+			{					
+				log( "Channel " + registration.camera + "_" + registration.channel + " registered" );
+				
+				// Send registration success to daemon
+				regServer.send( JSON.stringify( { "response": 1 } ) );
+			} );
+		}
+	}
+	catch( err )
 	{
-		// Spawn the geomuxpp daemon for video 0
-		var geomuxpp = spawn( 'geomuxpp', [ camera ] );
+		error( "Error in registration: " + err );
+		
+		// Send registration failure to daemon
+		regServer.send( JSON.stringify( { "response": 0 } ) );
+	}
+} );
 
-		// Optionally listen to geomuxpp standard IO
-		geomuxpp.stdout.on( 'data', function( data ) 
-		{
-			//log( data.toString() );
-		} );
+// Listen for camera commands and route them to the correct camera
+plugin.on( "geomux.command", function( camera, command, params )
+{
+	if( cameras[ camera ] !== undefined )
+	{
+		cameras[ camera ].emit( "command", command, params );
+	}
+} );
 
-		geomuxpp.stderr.on( 'data', function( data ) 
-		{
-			//error( "GEOMUXPP ERROR: " + data.toString() );
-		} );
+// Start a geomuxpp daemon for each booted camera
+bootedCameras.map( function( camera ) 
+{
+	log( "Starting geomuxpp for camera: " + camera );
+	
+	// Spawn the geomuxpp daemon for video 0
+	var geomuxpp = spawn( 'geomuxpp', [ camera ] );
 
-		geomuxpp.on( 'close', function( code )
-		{
-			log( "geomuxpp exited with code: " + code );
-		} );
+	// Optionally listen to geomuxpp standard IO
+	geomuxpp.stdout.on( 'data', function( data ) 
+	{
+		//log( data.toString() );
 	} );
-});
 
+	geomuxpp.stderr.on( 'data', function( data ) 
+	{
+		//error( "GEOMUXPP ERROR: " + data.toString() );
+	} );
+
+	geomuxpp.on( 'close', function( code )
+	{
+		log( "geomuxpp[" + camera + "] exited with code: " + code );
+	} );
+} );
