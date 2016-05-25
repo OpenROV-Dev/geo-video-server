@@ -36,8 +36,33 @@ var deps =
 	defaults: defaults
 }
 
-// Get the list of the cameras to connect to
-var bootedCameras = argv.c.split( ',' );
+var bootedCameras = [];
+
+// Do some string processing on the camera input
+try
+{
+	var camOption = argv.c;
+	var withoutBraces = argv.c.replace(/\[|\]/gi,'' );
+	
+	if( withoutBraces === "" )
+	{
+		throw "No cameras specified";
+	}
+	else
+	{
+		bootedCameras = withoutBraces.split( ',' );
+		
+		if( bootedCameras === undefined || bootedCameras.length == 0 )
+		{
+			throw "No cameras specified";
+		}
+	}
+}
+catch( err )
+{
+	error( "No cameras specified! Ending program!" );
+	throw "Error getting camera list: " + err;
+}
 
 var cameras = {};
 
@@ -95,6 +120,7 @@ plugin.on( "geomux.command", function( camera, command, params )
 		cameras[ camera ].emit( "command", command, params );
 	}
 } );
+
 
 // Start a geomuxpp daemon for each booted camera
 bootedCameras.map( function( camera ) 
