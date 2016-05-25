@@ -2,11 +2,15 @@ var zmq		        = require('zmq');
 var EventEmitter    = require('events').EventEmitter;
 var util            = require('util');
 
+
 var Camera = function( cameraOffset, deps )
 {
     EventEmitter.call(this);
     
     var self        = this;
+    var log       	= require('debug')( 'camera' + cameraOffset + ':log' );
+    var error		= require('debug')( 'camera' + cameraOffset + ':error' );
+
     this.offset     = cameraOffset;
     this.deps       = deps;
     this.commandPub = zmq.socket( 'pub' );
@@ -45,7 +49,7 @@ var Camera = function( cameraOffset, deps )
             // Call success callback
             callback();
             
-            console.log( "Registered channel" );
+            log( "Registered channel" );
         }
         catch( err )
         {

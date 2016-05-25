@@ -10,6 +10,9 @@ var Channel = function( camera, channelNum )
 	var channelPostfix	= camera.offset + "_" + channelNum;
 	var plugin			= camera.deps.plugin;
 	var defaults 		= camera.deps.defaults;
+	
+	var log       	= require('debug')( 'channel' + channelPostfix + ':log' );
+    var error		= require('debug')( 'channel' + channelPostfix + ':error' );
 
 	var videoStarted	= false;
 	var beaconTimer 	= null;
@@ -39,6 +42,16 @@ var Channel = function( camera, channelNum )
 	healthSub.connect( eventEndpoint );
 	healthSub.subscribe( "health" );
 	
+	// Set up status event listener
+	var statusSub = zmq.socket( 'sub' );
+	statusSub.connect( eventEndpoint );
+	statusSub.subscribe( "status" );
+	
+	// Set up error event listener
+	var errorSub = zmq.socket( 'sub' );
+	errorSub.connect( eventEndpoint );
+	errorSub.subscribe( "error" );
+	
 	// Set up video data subscribers
 	var initFrameSub = zmq.socket( 'sub' );
 	initFrameSub.connect( videoEndpoint );
@@ -54,6 +67,16 @@ var Channel = function( camera, channelNum )
     {
 		SendChannelCommand( command, params );
     } );
+	
+	errorSub.on( 'message', function( topic, data )
+    {
+		error( "Channel error: " + data );
+	} );
+	
+	statusSub.on( 'message', function( topic, data )
+    {
+		log( "Channel status: " + data );
+	} );
 	
 	apiSub.on( 'message', function( topic, data )
     {
@@ -108,9 +131,13 @@ var Channel = function( camera, channelNum )
     {
 		self.initFrame = data;
 		
+		log( "Channel status: Got init frame" );
+		
 		// Handle connections
 		videoSocket.on('connect',function(client)
 		{
+			log( "Channel status: New video connection" );
+			
 			client.on('request_Init_Segment', function(fn) 
 			{
 				fn( new Buffer( self.initFrame, 'binary' ) );
@@ -142,6 +169,7 @@ var Channel = function( camera, channelNum )
 		};
 		
 		plugin.emit( "geomux.channel.announcement", camera.offset, channelNum, announcement );
+		log( "Channel Announcement: " + JSON.stringify( announcement ) );
 		
 		// Create interval timer
         if( beaconTimer !== null )
@@ -152,7 +180,7 @@ var Channel = function( camera, channelNum )
 		// Announce camera endpoint every 5 secs
         setInterval( function()
 		{
-			console.log( "Channel Announcement: " + JSON.stringify( announcement ) );
+			log( "Channel Announcement: " + JSON.stringify( announcement ) );
 			plugin.emit( "geomux.channel.announcement", camera.offset, channelNum, announcement );
 		}, 5000 );
 	} );

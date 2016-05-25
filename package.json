@@ -10,6 +10,7 @@
   "license": "ALL RIGHTS RESERVED",
   "dependencies": {
     "express": "^4.13.4",
+    "debug": "^2.2.0",
     "glob": "^6.0.4",
     "minimist": "^1.2.0",
     "socket.io": "^1.4.5",

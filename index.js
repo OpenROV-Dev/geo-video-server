@@ -27,6 +27,8 @@ var fs 			= require('fs');
 var zmq			= require('zmq');
 var io			= require('socket.io')( defaults.port );
 var plugin		= io.of( defaults.wspath );
+var log       	= require('debug')( 'app:log' );
+var error		= require('debug')( 'app:error' );
 
 var deps = 
 {
@@ -43,10 +45,10 @@ exec( init_camera_script, function( err, stdout, stderr )
 {
 	if( err ) 
 	{
-		console.log( stderr );
-		console.log( stdout );
-		console.dir( err );
-
+		error( stderr );
+		error.dir( err );
+		log( stdout );
+		
 		throw err;
 	}
 	
@@ -69,20 +71,24 @@ exec( init_camera_script, function( err, stdout, stderr )
 
             if( registration.type === "camera_registration" )
             {
+				log( "Camera registration request: " + registration.camera );
+				
                 // Create a channel object
                 cameras[ registration.camera ] = require( "camera.js" )( registration.camera, deps );
-                
-				console.log( "Acknowledged cam." );
+				
+				log( "Camera " + registration.camera + " registered" );
 				
                 // Send registration success to daemon
                 regServer.send( JSON.stringify( { "response": 1 } ) );
             }
 			else if( registration.type === "channel_registration" )
             {
+				log( "Channel registration request: " + registration.camera + "_" + registration.channel );
+				
                 // Create a channel object
                 cameras[ registration.camera ].emit( "channel_registration", registration.channel, function()
-				{
-					console.log( "Acknowledged channel" );
+				{					
+					log( "Channel " + registration.camera + "_" + registration.channel + " registered" );
 					
 					// Send registration success to daemon
                 	regServer.send( JSON.stringify( { "response": 1 } ) );
@@ -91,7 +97,7 @@ exec( init_camera_script, function( err, stdout, stderr )
         }
         catch( err )
         {
-			console.error( "Error in registration: " + err );
+			error( "Error in registration: " + err );
 			
             // Send registration failure to daemon
             regServer.send( JSON.stringify( { "response": 0 } ) );
@@ -116,17 +122,17 @@ exec( init_camera_script, function( err, stdout, stderr )
 		// Optionally listen to geomuxpp standard IO
 		geomuxpp.stdout.on( 'data', function( data ) 
 		{
-			//console.log( data.toString() );
+			//log( data.toString() );
 		} );
 
 		geomuxpp.stderr.on( 'data', function( data ) 
 		{
-			//console.error( "GEOMUXPP ERROR: " + data.toString() );
+			//error( "GEOMUXPP ERROR: " + data.toString() );
 		} );
 
-		geomuxpp.on( 'close', function( code ) 
+		geomuxpp.on( 'close', function( code )
 		{
-			console.log( "geomuxpp exited with code: " + code );
+			log( "geomuxpp exited with code: " + code );
 		} );
 	} );
 });
