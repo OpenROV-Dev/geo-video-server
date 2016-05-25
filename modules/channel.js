@@ -147,6 +147,8 @@ var Channel = function( camera, channelNum )
 		// Register to video data
 		dataFrameSub.on( 'message', function( topic, data )
 		{
+			//log( "Packet received: " + data.length );
+			
 			// Forward packets over socket.io
 			videoSocket.compress(false).volatile.emit( 'x-h264-video.data', data );
 		} );
