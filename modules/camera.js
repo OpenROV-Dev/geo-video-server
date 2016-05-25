@@ -44,6 +44,8 @@ var Camera = function( cameraOffset, deps )
             
             // Call success callback
             callback();
+            
+            console.log( "Registered channel" );
         }
         catch( err )
         {

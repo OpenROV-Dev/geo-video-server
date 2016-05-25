@@ -9,20 +9,20 @@ var Channel = function( camera, channelNum )
 	
 	var channelPostfix	= camera.offset + "_" + channelNum;
 	var plugin			= camera.deps.plugin;
-	var defaults 		= camera.defaults;
+	var defaults 		= camera.deps.defaults;
 
 	var videoStarted	= false;
 	var beaconTimer 	= null;
 
-	var videoEndpoint	= "ipc:///tmp/geomux_video" + cameraOffset + "_" + channelNum + ".ipc";
-	var eventEndpoint	= "ipc:///tmp/geomux_event" + cameraOffset + "_" + channelNum + ".ipc";
+	var videoEndpoint	= "ipc:///tmp/geomux_video" + camera.offset + "_" + channelNum + ".ipc";
+	var eventEndpoint	= "ipc:///tmp/geomux_event" + camera.offset + "_" + channelNum + ".ipc";
 
 	this.initFrame 		= {};
 	this.settings		= {};
 	this.api			= {};
 
 	// Create video socket
-	var videoSocket		= require('socket.io')( defaults.port, { path: defaults.wspath + channelPostfix + "_video" } );
+	var videoSocket		= camera.deps.io.of( defaults.wspath + channelPostfix );
 	
 	// Set up api event listener
 	var apiSub = zmq.socket( 'sub' );
@@ -69,10 +69,13 @@ var Channel = function( camera, channelNum )
 		// Set some initial settings
 		SendChannelCommand( "apply_settings", 
 		{
-			"bitrate": 		{ "value": 2000000 },
-			"goplen": 		{ "value": 10 },
-			"pict_timing": 	{ "enabled": true },
-			"vui":			{ "enabled": true },
+			"settings":
+			{
+				"bitrate": 		{ "value": 2000000 },
+				"goplen": 		{ "value": 10 },
+				"pict_timing": 	{ "enabled": true },
+				"vui":			{ "enabled": true }
+			}
 		} ); 
 		
 		// Now that we have the API, we can start the video
@@ -83,7 +86,7 @@ var Channel = function( camera, channelNum )
 	settingsSub.on( 'message', function( topic, data )
     {
 		var settings = JSON.parse( data );
-
+			
 		// Update our local settings store
 		for(var setting in settings )
 		{
@@ -92,9 +95,6 @@ var Channel = function( camera, channelNum )
      
 	 	// Report the settings to plugin
 		plugin.emit( "geomux.channel.settings", camera.offset, channelNum, settings );
-		
-		// Store the current settings locally
-		self.settings = settings;
 	} );
 	
 	healthSub.on( 'message', function( topic, data )
@@ -137,7 +137,7 @@ var Channel = function( camera, channelNum )
 				videoMimeType: 		'video/mp4',
 				cameraLocation: 	defaults.location,
 				relativeServiceUrl: defaults.url,  
-				wspath: 			defaults.wspath + channelPostfix + "_video"
+				wspath: 			defaults.wspath + channelPostfix
 			}
 		};
 		
@@ -152,6 +152,7 @@ var Channel = function( camera, channelNum )
 		// Announce camera endpoint every 5 secs
         setInterval( function()
 		{
+			console.log( "Channel Announcement: " + JSON.stringify( announcement ) );
 			plugin.emit( "geomux.channel.announcement", camera.offset, channelNum, announcement );
 		}, 5000 );
 	} );
@@ -170,8 +171,13 @@ var Channel = function( camera, channelNum )
 	
 	function SendChannelCommand( command, params )
 	{
+		if( params === undefined )
+		{
+			params = "";
+		}
+		
 		// Send channel command over zeromq to geomuxpp
-		camera.commandPublisher.send( 
+		camera.commandPub.send( 
 		[ 
 			"cmd",
 			JSON.stringify(
@@ -180,7 +186,7 @@ var Channel = function( camera, channelNum )
 				ch: 	channelNum,
 				chCmd: 	command,
 				params: params
-			} ) 	
+			} )
 		] );
 	};
 };

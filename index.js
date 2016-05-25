@@ -25,11 +25,13 @@ var spawn 		= require('child_process').spawn;
 var exec 		= require('child_process').exec;
 var fs 			= require('fs');
 var zmq			= require('zmq');
-var io 			= require('socket.io')( defaults.port, { path: defaults.wspath } );
+var io			= require('socket.io')( defaults.port );
+var plugin		= io.of( defaults.wspath );
 
 var deps = 
 {
-	plugin: io,
+	io: io,
+	plugin: plugin,
 	defaults: defaults
 }
 
@@ -70,6 +72,8 @@ exec( init_camera_script, function( err, stdout, stderr )
                 // Create a channel object
                 cameras[ registration.camera ] = require( "camera.js" )( registration.camera, deps );
                 
+				console.log( "Acknowledged cam." );
+				
                 // Send registration success to daemon
                 regServer.send( JSON.stringify( { "response": 1 } ) );
             }
@@ -78,6 +82,8 @@ exec( init_camera_script, function( err, stdout, stderr )
                 // Create a channel object
                 cameras[ registration.camera ].emit( "channel_registration", registration.channel, function()
 				{
+					console.log( "Acknowledged channel" );
+					
 					// Send registration success to daemon
                 	regServer.send( JSON.stringify( { "response": 1 } ) );
 				} );
@@ -85,6 +91,8 @@ exec( init_camera_script, function( err, stdout, stderr )
         }
         catch( err )
         {
+			console.error( "Error in registration: " + err );
+			
             // Send registration failure to daemon
             regServer.send( JSON.stringify( { "response": 0 } ) );
         }
