@@ -90,16 +90,14 @@ var Channel = function( camera, channelNum )
 		
 		// TODO: Load stored settings for this camera, or load them from currently selected settings profile in cockpit
 		// Set some initial settings
-		SendChannelCommand( "apply_settings", 
+		ApplySettings(
 		{
-			"settings":
-			{
-				"bitrate": 		{ "value": 2000000 },
-				"goplen": 		{ "value": 10 },
-				"pict_timing": 	{ "enabled": true },
-				"vui":			{ "enabled": true }
-			}
-		} ); 
+			"bitrate": 		{ "value": 2000000 },
+			"goplen": 		{ "value": 10 },
+			"pict_timing": 	{ "enabled": true },
+			"vui":			{ "enabled": true }
+		}
+		); 
 		
 		// Now that we have the API, we can start the video
 		// TODO: Have plugin tell us when to start
@@ -218,6 +216,17 @@ var Channel = function( camera, channelNum )
 				params: params
 			} )
 		] );
+	};
+	
+	function ApplySettings( settings )
+	{
+		if( settings === undefined )
+		{
+			return;
+		}
+		
+		// Apply settings to channel
+		SendChannelCommand( "apply_settings", { "settings": settings } );
 	};
 };
 util.inherits(Channel, EventEmitter);
