@@ -18,6 +18,9 @@ var Camera = function( cameraOffset, deps )
     var channels    = {};
     var plugin      = deps.plugin;
     
+    // TODO: We need some way to map and remember which camera is which!
+    this.location   = "forward";
+    
     // Handle command requests for this camera from the cockpit plugin
     this.on( "command", function( command, params )
     {
@@ -48,8 +51,6 @@ var Camera = function( cameraOffset, deps )
             
             // Call success callback
             callback();
-            
-            log( "Registered channel" );
         }
         catch( err )
         {
@@ -59,9 +60,6 @@ var Camera = function( cameraOffset, deps )
     
     // Connect to geomuxpp command socket
     this.commandPub.connect( "ipc:///tmp/geomux_command" + cameraOffset + ".ipc" );
-    
-    // Announce this camera's creation
-    plugin.emit( "geomux.camera.announcement", cameraOffset );
     
     // ----------------
 	// Helper functions

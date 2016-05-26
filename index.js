@@ -14,9 +14,7 @@ require('module').Module._initPaths();
 
 var defaults = 
 {
-	location: 	process.env.GEO_LOCATION || "forward",
 	port: 		process.env.GEO_PORT || 8099,
-	device: 	process.env.GEO_DEVICE || '0',
 	url: 		process.env.GEO_URL || ':' + ( process.env.GEO_PORT || 8099 ) + '/',
 	wspath: 	process.env.GEO_WSPATH || '/geovideo',
 };
@@ -130,6 +128,32 @@ plugin.on( "connection", function( client )
 			{
 				cameras[ camera ].emit( "command", command, params );
 			}
+		} );
+		
+		// Allow late joiners to get latest camera state
+		client.on( "geomux.requestCameraInfo", function( callback )
+		{
+			var cams = {};
+			
+			// For each camera
+			Object.keys( cameras ).map( function( cam )
+			{
+				// For each channel
+				Object.keys( cam.channels ).map( function( channel )
+				{
+					cams[ cam ] = cams[ cam ] || {};
+					
+					// Create a new channel object with a subset of the properties
+					cams[ cam ][ channel ] =
+					{
+						api: cameras[ channel ].api,
+						settings: cameras[ channel ].settings
+					}
+				});
+			});
+			
+			// Pass the data into the callback
+			callback( cams );
 		} );
 		
 		// Only start the daemons once

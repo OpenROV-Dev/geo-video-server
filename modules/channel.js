@@ -23,6 +23,7 @@ var Channel = function( camera, channelNum )
 	this.initFrame 		= {};
 	this.settings		= {};
 	this.api			= {};
+	
 
 	// Create video socket
 	var videoSocket		= camera.deps.io.of( "/" + defaults.wspath + channelPostfix );
@@ -82,11 +83,11 @@ var Channel = function( camera, channelNum )
     {
 		var api = JSON.parse( data );
 		
-		// Report the API to plugin
-		plugin.emit( "geomux.channel.api", camera.offset, channelNum, api );
-		
 		// Update our local api
 		self.api = api;
+		
+		// Report the API to plugin
+		plugin.emit( "geomux.channel.api", camera.offset, channelNum, self.api );
 		
 		// TODO: Load stored settings for this camera, or load them from currently selected settings profile in cockpit
 		// Set some initial settings
@@ -115,7 +116,7 @@ var Channel = function( camera, channelNum )
 		}
      
 	 	// Report the settings to plugin
-		plugin.emit( "geomux.channel.settings", camera.offset, channelNum, settings );
+		plugin.emit( "geomux.channel.settings", camera.offset, channelNum, self.settings );
 	} );
 	
 	healthSub.on( 'message', function( topic, data )
@@ -162,13 +163,13 @@ var Channel = function( camera, channelNum )
 				resolution: 		self.settings.width.toString() + "x" + self.settings.height.toString(),
 				framerate: 			self.settings.framerate,
 				videoMimeType: 		'video/mp4',
-				cameraLocation: 	defaults.location,
+				cameraLocation: 	camera.location,
 				relativeServiceUrl: defaults.url,  
 				wspath: 			defaults.wspath + channelPostfix
 			}
 		};
 		
-		plugin.emit( "geomux.channel.announcement", camera.offset, channelNum, announcement );
+		plugin.emit( "geomux.video.announcement", camera.offset, channelNum, announcement );
 		log( "Channel Announcement: " + JSON.stringify( announcement ) );
 		
 		// Create interval timer
@@ -181,7 +182,7 @@ var Channel = function( camera, channelNum )
         setInterval( function()
 		{
 			log( "Channel Announcement: " + JSON.stringify( announcement ) );
-			plugin.emit( "geomux.channel.announcement", camera.offset, channelNum, announcement );
+			plugin.emit( "geomux.video.announcement", camera.offset, channelNum, announcement );
 		}, 5000 );
 	} );
 	
