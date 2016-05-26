@@ -61,7 +61,7 @@ var Camera = function( cameraOffset, deps )
     this.commandPub.connect( "ipc:///tmp/geomux_command" + cameraOffset + ".ipc" );
     
     // Announce this camera's creation
-    plugin.emit( "geomux.camera.announce", cameraOffset );
+    plugin.emit( "geomux.camera.announcement", cameraOffset );
     
     // ----------------
 	// Helper functions
