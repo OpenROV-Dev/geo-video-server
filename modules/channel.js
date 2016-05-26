@@ -25,7 +25,7 @@ var Channel = function( camera, channelNum )
 	this.api			= {};
 
 	// Create video socket
-	var videoSocket		= camera.deps.io.of( defaults.wspath + channelPostfix );
+	var videoSocket		= camera.deps.io.of( "/" + defaults.wspath + channelPostfix );
 	
 	// Set up api event listener
 	var apiSub = zmq.socket( 'sub' );
@@ -124,6 +124,15 @@ var Channel = function( camera, channelNum )
 		plugin.emit( "geomux.channel.health", camera.offset, channelNum, JSON.parse( data ) );
 	} );
 	
+	// Register to video data
+	dataFrameSub.on( 'message', function( topic, data )
+	{
+		//log( "Packet received: " + data.length );
+		
+		// Forward packets over socket.io
+		videoSocket.compress(false).volatile.emit( 'x-h264-video.data', data );
+	} );
+	
 	// Listen for the init frame
 	initFrameSub.on( 'message', function( topic, data )
     {
@@ -141,16 +150,7 @@ var Channel = function( camera, channelNum )
 				fn( new Buffer( self.initFrame, 'binary' ) );
 			});
 		});
-		
-		// Register to video data
-		dataFrameSub.on( 'message', function( topic, data )
-		{
-			//log( "Packet received: " + data.length );
-			
-			// Forward packets over socket.io
-			videoSocket.compress(false).volatile.emit( 'x-h264-video.data', data );
-		} );
-		
+
 		// Announce video source as json object on stderr
         var announcement = 
 		{ 
