@@ -29,14 +29,16 @@ var log       	= require('debug')( 'app:log' );
 var error		= require('debug')( 'app:error' );
 var argv 		= require('minimist')( process.argv );
 
-var deps = 
+var deps 		=
 {
 	io: io,
 	plugin: plugin,
 	defaults: defaults
 }
+var bootedCameras 	= [];
+var daemonsStarted	= false;
 
-var bootedCameras = [];
+
 
 // Do some string processing on the camera input
 try
@@ -112,37 +114,55 @@ regServer.on( 'message', function( msg )
 	}
 } );
 
-// Listen for camera commands and route them to the correct camera
-plugin.on( "geomux.command", function( camera, command, params )
+// Handle multiple connects to the goe-video-server
+plugin.on( "connection", function( client )
 {
-	if( cameras[ camera ] !== undefined )
-	{
-		cameras[ camera ].emit( "command", command, params );
-	}
-} );
-
-
-// Start a geomuxpp daemon for each booted camera
-bootedCameras.map( function( camera ) 
-{
-	log( "Starting geomuxpp for camera: " + camera );
+	console.log( "New geo-video-server connection!" );
 	
-	// Spawn the geomuxpp daemon for video 0
-	var geomuxpp = spawn( 'geomuxpp', [ camera ] );
+	client.on( "geomux.ready", function()
+	{		
+		console.log( "Got ready from plugin" );
+		
+		// Listen for camera commands and route them to the correct camera
+		client.on( "geomux.command", function( camera, command, params )
+		{
+			if( cameras[ camera ] !== undefined )
+			{
+				cameras[ camera ].emit( "command", command, params );
+			}
+		} );
+		
+		// Only start the daemons once
+		if( daemonsStarted === false )
+		{
+			daemonsStarted = true;
+			
+			// Start a geomuxpp daemon for each booted camera
+			bootedCameras.map( function( camera ) 
+			{
+				log( "Starting geomuxpp for camera: " + camera );
+				
+				// Spawn the geomuxpp daemon for video 0
+				var geomuxpp = spawn( 'geomuxpp', [ camera ] );
 
-	// Optionally listen to geomuxpp standard IO
-	geomuxpp.stdout.on( 'data', function( data ) 
-	{
-		//log( data.toString() );
-	} );
+				// Optionally listen to geomuxpp standard IO
+				geomuxpp.stdout.on( 'data', function( data ) 
+				{
+					//log( data.toString() );
+				} );
 
-	geomuxpp.stderr.on( 'data', function( data ) 
-	{
-		//error( "GEOMUXPP ERROR: " + data.toString() );
-	} );
+				geomuxpp.stderr.on( 'data', function( data ) 
+				{
+					//error( "GEOMUXPP ERROR: " + data.toString() );
+				} );
 
-	geomuxpp.on( 'close', function( code )
-	{
-		log( "geomuxpp[" + camera + "] exited with code: " + code );
+				geomuxpp.on( 'close', function( code )
+				{
+					log( "geomuxpp[" + camera + "] exited with code: " + code );
+				} );
+			} );
+		}
 	} );
 } );
+
+
