@@ -8,6 +8,7 @@ var Channel = function( camera, channelNum )
 	var self 			= this;
 	
 	var channelPostfix	= camera.offset + "_" + channelNum;
+	var server			= camera.deps.server;
 	var plugin			= camera.deps.plugin;
 	var defaults 		= camera.deps.defaults;
 	
@@ -26,7 +27,7 @@ var Channel = function( camera, channelNum )
 	
 
 	// Create video socket
-	var videoSocket		= camera.deps.io.of( "/" + defaults.wspath + channelPostfix );
+	var videoSocket		= require('socket.io')(server,{origins: '*:*',path:defaults.wspath + channelPostfix });
 	
 	// Set up api event listener
 	var apiSub = zmq.socket( 'sub' );

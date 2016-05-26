@@ -21,15 +21,21 @@ var defaults =
 
 var spawn 		= require('child_process').spawn;
 var zmq			= require('zmq');
-var io			= require('socket.io')( defaults.port );
-var plugin		= io.of( defaults.wspath );
 var log       	= require('debug')( 'app:log' );
 var error		= require('debug')( 'app:error' );
 var argv 		= require('minimist')( process.argv );
 
+var server		= require('http').createServer();
+server.listen( defaults.port, function () 
+{
+  console.log( 'Geo Video Server Listening on ' + defaults.port );
+})
+
+var plugin 		= require('socket.io')(server,{origins: '*:*',path:defaults.wspath });
+
 var deps 		=
 {
-	io: io,
+	server: server,
 	plugin: plugin,
 	defaults: defaults
 }
