@@ -15,7 +15,7 @@ require('module').Module._initPaths();
 var defaults = 
 {
 	port: 		process.env.GEO_PORT || 8099,
-	url: 		process.env.GEO_URL || ':' + ( process.env.GEO_PORT || 8099 ) + '/',
+	url: 		'',
 	wspath: 	process.env.GEO_WSPATH || '/geovideo',
 };
 
