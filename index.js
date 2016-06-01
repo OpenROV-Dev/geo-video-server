@@ -12,18 +12,56 @@ if( process.env[ 'NODE_PATH' ] !== undefined )
 process.env['NODE_PATH'] = __dirname + '/modules:' + oldpath;
 require('module').Module._initPaths();
 
-var defaults = 
-{
-	port: 		process.env.GEO_PORT || 8099,
-	url: 		process.env.GEO_URL || ':' + 8099 + '/',
-	wspath: 	process.env.GEO_WSPATH || '/geovideo',
-};
-
 var spawn 		= require('child_process').spawn;
 var zmq			= require('zmq');
 var log       	= require('debug')( 'app:log' );
 var error		= require('debug')( 'app:error' );
-var argv 		= require('minimist')( process.argv );
+
+var bootedCameras 	= [];
+var daemonsStarted	= false;
+var defaults		= {};
+
+// Get command line arguments
+var argv = require( "yargs" )
+	.usage( "Usage: $0 -c [cam0] [cam1] [camX] -p [port number] -u [relative url] -w [socket.io path]" )
+	.array( "c" )
+	.number( "p" )
+	.string( "u" )
+	.string( "w" )
+	.demand( [ "c", "p", "u", "w" ] )
+	.fail( function (msg, err) 
+	{
+		error( "Error parsing arguments: " + msg );
+		error( "Exiting..." );
+		process.exit(1);
+	})
+	.argv;
+
+// Validate and set arguments
+try
+{	
+	bootedCameras = argv.c;
+	
+	if( bootedCameras.length == 0 )
+	{
+		throw "No cameras specified";
+	}
+	
+	// -p=<port number>
+	defaults.port 	= argv.p;
+	
+	// -u=<relative url>
+	defaults.url 	= argv.u;
+	
+	// -w=<ws path>
+	defaults.wspath = argv.w;
+}
+catch( err )
+{
+	error( "Error parsing arguments: " + err );
+	error( "Exiting..." );
+	process.exit(1);
+}
 
 var server		= require('http').createServer();
 server.listen( defaults.port, function () 
@@ -38,36 +76,6 @@ var deps 		=
 	server: server,
 	plugin: plugin,
 	defaults: defaults
-}
-var bootedCameras 	= [];
-var daemonsStarted	= false;
-
-
-
-// Do some string processing on the camera input
-try
-{
-	var camOption = argv.c;
-	var withoutBraces = argv.c.replace(/\[|\]/gi,'' );
-	
-	if( withoutBraces === "" )
-	{
-		throw "No cameras specified";
-	}
-	else
-	{
-		bootedCameras = withoutBraces.split( ',' );
-		
-		if( bootedCameras === undefined || bootedCameras.length == 0 )
-		{
-			throw "No cameras specified";
-		}
-	}
-}
-catch( err )
-{
-	error( "No cameras specified! Ending program!" );
-	throw "Error getting camera list: " + err;
 }
 
 var cameras = {};
