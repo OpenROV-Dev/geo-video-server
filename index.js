@@ -17,10 +17,6 @@ var zmq			= require('zmq');
 var log       	= require('debug')( 'app:log' );
 var error		= require('debug')( 'app:error' );
 
-var bootedCameras 	= [];
-var daemonsStarted	= false;
-var defaults		= {};
-
 // Get command line arguments
 var argv = require( "yargs" )
 	.usage( "Usage: $0 -c [cam0] [cam1] [camX] -p [port number] -u [relative url] -w [socket.io path]" )
@@ -36,6 +32,11 @@ var argv = require( "yargs" )
 		process.exit(1);
 	})
 	.argv;
+	
+var bootedCameras 	= [];
+var defaults		= {};
+var cameras 		= {};
+var daemonsStarted	= false;
 
 // Validate and set arguments
 try
@@ -77,8 +78,6 @@ var deps 		=
 	plugin: plugin,
 	defaults: defaults
 }
-
-var cameras = {};
 
 // Setup ZMQ camera registration REQ/REP 
 var regServer = zmq.socket( 'rep' );
