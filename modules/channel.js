@@ -37,7 +37,7 @@ var Channel = function( camera, channelNum )
 	// Set up settings event listener
 	var settingsSub = zmq.socket( 'sub' );
 	settingsSub.connect( eventEndpoint );
-	settingsSub.subscribe( "settings_update" );
+	settingsSub.subscribe( "settings" );
 	
 	// Set up health event listener
 	var healthSub = zmq.socket( 'sub' );
@@ -161,8 +161,8 @@ var Channel = function( camera, channelNum )
 			addresses:	['127.0.0.1'],
 			txtRecord:
 			{
-				resolution: 		self.settings.width.toString() + "x" + self.settings.height.toString(),
-				framerate: 			self.settings.framerate,
+				resolution: 		self.settings.width.value.toString() + "x" + self.settings.height.value.toString(),
+				framerate: 			self.settings.framerate.value,
 				videoMimeType: 		'video/mp4',
 				cameraLocation: 	camera.location,
 				relativeServiceUrl: defaults.url,  
