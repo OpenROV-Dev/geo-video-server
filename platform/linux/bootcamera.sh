@@ -47,7 +47,7 @@ else
     if [ $bootmodesnor -eq 0 ]
     then
         echo "Camera is in factory SNOR mode, changing to USB boot..."
-        mxcam flash --bootloader --silent $DIR/../../firmware/gc6500_btld_ddrboot_534_epwr.rom
+        mxcam flash --silent --bootloader $DIR/../../firmware/gc6500_btld_ddrboot_534_epwr.rom
         mxcam boot $DIR/../../firmware/gc6500_ddrboot_fw.gz.img $DIR/../../geoconf/ov4689_H264_1080p30.json
         echo "Camera booted in USB mode."
     fi
