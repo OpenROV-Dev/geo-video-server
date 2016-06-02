@@ -185,6 +185,9 @@ var Channel = function( camera, channelNum )
 			log( "Channel Announcement: " + JSON.stringify( announcement ) );
 			plugin.emit( "geomux.video.announcement", camera.offset, channelNum, announcement );
 		}, 5000 );
+		
+		// Emit init frame as part of the h264 data stream to allow for re-init of existing clients in the browser
+		videoSocket.compress(false).volatile.emit( 'x-h264-video.data', data );
 	} );
 	
 	// ----------------
