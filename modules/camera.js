@@ -1,43 +1,86 @@
-var events = require('events');  
-const glob = require("glob");
+var zmq		        = require('zmq');
+var EventEmitter    = require('events').EventEmitter;
+var util            = require('util');
 
-var Camera = function(){
-  var exec = require('child_process').exec;
-  var fs = require('fs');
 
-  var mxcam_command = "mxcam";
-  var mxuvc_command = "mxuvc";
-  var init_camera_script = __dirname +"/../platform/linux/bootcamera.sh";
+var Camera = function( cameraOffset, deps )
+{
+    EventEmitter.call(this);
     
-  this.video = null;
-  this.status = 'initializing';
+    var self        = this;
+    var log       	= require('debug')( 'camera' + cameraOffset + ':log' );
+    var error		= require('debug')( 'camera' + cameraOffset + ':error' );
 
-  events.EventEmitter.call(this);
-  var self=this;
-  var child = exec(init_camera_script, function(err, stdout, stderr) {
-      if (err) {
-        console.log(stderr);
-        console.log(stdout);
-        console.dir(err);
-        throw err;
-        //TODO: handle the 1004 exit code: No Geo Camera found
-      };
-      var _this = self;
-      glob("/dev/v4l/by-id/usb-GEO_Semi_Condor*", function (er, files) {
-          if (er) throw er;
-          
-      // At the moment the system assumes /dev/video0.  We actually
-      // need to determine which concern needs to pick the actual camera
-      // to stream, assuming more than one Geo Camera.
-      _this.video = require("geomux");
-      _this.status = 'ready';
-      _this.emit('ready');
+    this.offset     = cameraOffset;
+    this.deps       = deps;
+    this.commandPub = zmq.socket( 'pub' );
+    
+    var channels    = {};
+    var plugin      = deps.plugin;
+    
+    // TODO: We need some way to map and remember which camera is which!
+    this.location   = "forward";
+    
+    // Handle command requests for this camera from the cockpit plugin
+    this.on( "command", function( command, params )
+    {
+        if( command == "chCmd" )
+        {
+            // Channel level commands
+            var channel = params.channel;
+            
+            if( channels[ channel ] !== undefined )
+            {
+                channels[ channel ].emit( "command", params.command, params.params );
+            }
+        }
+        else
+        {
+            // Camera level commands
+            SendCommand( command, params )
+        } 
+    } );
+    
+    // Handle channel registrations
+    this.on( "channel_registration", function( channelNum, callback )
+	{
+        try
+        {
+            // Create a channel object
+            channels[ channelNum ] = require( "channel.js" )( self, channelNum );
+            
+            // Call success callback
+            callback();
+        }
+        catch( err )
+        {
+            throw "Channel registration failed: " + err;
+        }
+    } );
+    
+    // Connect to geomuxpp command socket
+    this.commandPub.connect( "ipc:///tmp/geomux_command" + cameraOffset + ".ipc" );
+    
+    // ----------------
+	// Helper functions
+    	
+	function SendCommand( command, params )
+	{
+		// Send channel command over zeromq to geomuxpp
+		self.commandPub.send( 
+		[ 
+			"cmd",
+			JSON.stringify(
+			{
+				cmd: command,
+				params: params
+			} ) 	
+		] );
+	};
+};
+util.inherits(Camera, EventEmitter);
 
-      });      
-  });  
-  
-}
-
-Camera.prototype.__proto__ = events.EventEmitter.prototype;
-
-module.exports=new Camera();
+module.exports = function( cameraOffset, deps ) 
+{
+    return new Camera( cameraOffset, deps );
+};
