@@ -12,7 +12,7 @@ if( process.env[ 'NODE_PATH' ] !== undefined )
 process.env['NODE_PATH'] = __dirname + '/modules:' + oldpath;
 require('module').Module._initPaths();
 
-var spawn 		= require('child_process').spawn;
+const respawn 	= require('respawn');
 var zmq			= require('zmq');
 var log       	= require('debug')( 'app:log' );
 var error		= require('debug')( 'app:error' );
@@ -173,30 +173,62 @@ plugin.on( "connection", function( client )
 		if( daemonsStarted === false )
 		{
 			daemonsStarted = true;
-			
+						
 			// Start a geomuxpp daemon for each booted camera
 			bootedCameras.map( function( camera ) 
-			{
-				log( "Starting geomuxpp for camera: " + camera );
+			{				
+				// Create all launch options
+				var launch_options = 
+				[ 
+					"nice", "-1",
+					"geomuxpp", camera
+				];
 				
-				// Spawn the geomuxpp daemon for video 0
-				var geomuxpp = spawn( 'geomuxpp', [ camera ] );
-
-				// Optionally listen to geomuxpp standard IO
-				geomuxpp.stdout.on( 'data', function( data ) 
+				const infinite = -1;
+ 
+				// Launch the video server with specified options. Attempt to restart every 1s.
+				var monitor = respawn( launch_options,
 				{
-					//log( data.toString() );
+					name: "geomuxpp[" + camera + "]",
+					maxRestarts: infinite,
+					sleep: 30000
 				} );
-
-				geomuxpp.stderr.on( 'data', function( data ) 
+				
+				monitor.on('crash',function()
 				{
-					//error( "GEOMUXPP ERROR: " + data.toString() );
-				} );
-
-				geomuxpp.on( 'close', function( code )
+					log( "geomuxpp[" + camera + "] crashed" );
+				});
+				
+				monitor.on('spawn',function(process)
 				{
-					log( "geomuxpp[" + camera + "] exited with code: " + code );
-				} );
+					log( "geomuxpp[" + camera + "] spawned" );
+				});
+				
+				monitor.on('warn',function(error)
+				{
+					log( "geomuxpp[" + camera + "] warning: " + error );
+				});
+				
+				monitor.on('exit',function(code, signal)
+				{
+					log( "geomuxpp[" + camera + "] exited: code: " + code + " signal: " + signal);
+				});
+
+				// Optional stdio logging
+				monitor.on('stdout',function(data)
+				{
+					var msg = data.toString('utf-8');
+					log( "geomuxpp[" + camera + "]: " + msg );
+				});
+
+				monitor.on('stderr',function(data)
+				{
+					var msg = data.toString('utf-8');
+					log( "geomuxpp[" + camera + "] ERROR: " + msg );
+				});
+
+				console.log( "Starting geomuxpp[" + camera + "]..." );
+				monitor.start();
 			} );
 		}
 	} );
