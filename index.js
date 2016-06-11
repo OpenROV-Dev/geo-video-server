@@ -19,12 +19,11 @@ var error		= require('debug')( 'app:error' );
 
 // Get command line arguments
 var argv = require( "yargs" )
-	.usage( "Usage: $0 -c [cam0] [cam1] [camX] -p [port number] -u [relative url] -w [socket.io path]" )
-	.array( "c" )
+	.usage( "Usage: $0 -p [port number] -u [relative url] -w [socket.io path]" )
 	.number( "p" )
 	.string( "u" )
 	.string( "w" )
-	.demand( [ "c", "p", "u", "w" ] )
+	.demand( [ "p", "u", "w" ] )
 	.fail( function (msg, err) 
 	{
 		error( "Error parsing arguments: " + msg );
@@ -33,21 +32,11 @@ var argv = require( "yargs" )
 	})
 	.argv;
 	
-var bootedCameras 	= [];
-var defaults		= {};
-var cameras 		= {};
-var daemonsStarted	= false;
+var defaults = {};
 
 // Validate and set arguments
 try
 {	
-	bootedCameras = argv.c;
-	
-	if( bootedCameras.length == 0 )
-	{
-		throw "No cameras specified";
-	}
-	
 	// -p=<port number>
 	defaults.port 	= argv.p;
 	
@@ -64,174 +53,308 @@ catch( err )
 	process.exit(1);
 }
 
-var server		= require('http').createServer();
+// Create HTTP server
+var server = require('http').createServer();
 server.listen( defaults.port, function () 
 {
-  console.log( 'Geo Video Server Listening on ' + defaults.port );
+  console.log( 'geo-video-server listening on ' + defaults.port );
 })
 
-var plugin 		= require('socket.io')(server,{origins: '*:*',path:defaults.wspath });
+// Create Socket.IO server for interactions with server plugin
+var plugin = require( 'socket.io' )( server,{ origins: '*:*', path: defaults.wspath } );
 
-var deps 		=
+var deps =
 {
 	server: server,
 	plugin: plugin,
 	defaults: defaults
 }
 
-// Setup ZMQ camera registration REQ/REP 
-var regServer = zmq.socket( 'rep' );
+var availableCameras = {};
+var registeredCameras = {};
 
-// Listen for camera and channel registrations over ZeroMQ
-regServer.bind( "ipc:///tmp/geomux_registration.ipc" );
-regServer.on( 'message', function( msg )
-{
-	try
-	{
-		var registration = JSON.parse( msg );
 
-		if( registration.type === "camera_registration" )
-		{
-			log( "Camera registration request: " + registration.camera );
-			
-			// Create a channel object
-			cameras[ registration.camera ] = require( "camera.js" )( registration.camera, deps );
-			
-			log( "Camera " + registration.camera + " registered" );
-			
-			// Send registration success to daemon
-			regServer.send( JSON.stringify( { "response": 1 } ) );
-		}
-		else if( registration.type === "channel_registration" )
-		{
-			log( "Channel registration request: " + registration.camera + "_" + registration.channel );
-			
-			// Create a channel object
-			cameras[ registration.camera ].emit( "channel_registration", registration.channel, function()
-			{					
-				log( "Channel " + registration.camera + "_" + registration.channel + " registered" );
-				
-				// Send registration success to daemon
-				regServer.send( JSON.stringify( { "response": 1 } ) );
-			} );
-		}
-	}
-	catch( err )
-	{
-		error( "Error in registration: " + err );
-		
-		// Send registration failure to daemon
-		regServer.send( JSON.stringify( { "response": 0 } ) );
-	}
-} );
-
+// Establish a connection with the server plugin
 // Handle multiple connects to the goe-video-server
 plugin.on( "connection", function( client )
 {
-	console.log( "New geo-video-server connection!" );
+	// Listen for ready message from server plugin
+	log( "New geo-video-server connection!" );
 	
 	client.on( "geomux.ready", function()
-	{		
-		console.log( "Got ready from plugin" );
-		
+	{	
+		log( "Got ready from plugin" );
+
 		// Listen for camera commands and route them to the correct camera
 		client.on( "geomux.command", function( camera, command, params )
 		{
-			if( cameras[ camera ] !== undefined )
+			if( registeredCameras[ camera ] !== undefined )
 			{
-				cameras[ camera ].emit( "command", command, params );
+				registeredCameras[ camera ].emit( "command", command, params );
+			}
+			else
+			{
+				error( "Camera [" + camera + "] - Failed to execute command: " + command + "( " + JSON.stringify( params ) + " ) - Camera doesn't exist." );
 			}
 		} );
-		
-		// Allow late joiners to get latest camera state
-		client.on( "geomux.requestCameraInfo", function( callback )
+
+		// Start listening for camera registrations
+		ListenForCameraRegistrations();
+
+		// Start camera find/boot timer
+		setInterval( function()
 		{
-			var cams = {};
-			
-			// For each camera
-			Object.keys( cameras ).map( function( cam )
+			// Get list of available geo cameras
+			var cameras = EnumerateCameras();
+
+			// Loop through each camera
+			for( camera in cameras )
 			{
-				// For each channel
-				Object.keys( cam.channels ).map( function( channel )
+				// If the camera has never been seen before, create a new entry for it in available cameras
+				if( availableCameras[ camera.offset ] == undefined )
 				{
-					cams[ cam ] = cams[ cam ] || {};
-					
-					// Create a new channel object with a subset of the properties
-					cams[ cam ][ channel ] =
+					availableCameras[ camera.offset ] 				= camera;
+					availableCameras[ camera.offset ].daemon 		= null;
+					availableCameras[ camera.offset ].daemonStarts 	= 0;
+				}
+
+				// Check camera's boot state
+				var booted = IsCorrectlyBooted( camera );
+
+				// Easy reference to the camera in question
+				var cam	= availableCameras[ camera.offset ];
+
+				// Handle each combination of boot state and daemon state
+
+				if( !booted && !cam.daemon )
+				{
+					// Boot the camera
+					BootCamera( cam, function( error )
 					{
-						api: cameras[ channel ].api,
-						settings: cameras[ channel ].settings
-					}
-				});
-			});
-			
-			// Pass the data into the callback
-			callback( cams );
-		} );
-		
-		// Only start the daemons once
-		if( daemonsStarted === false )
-		{
-			daemonsStarted = true;
+						if( error )
+						{
+							error( "Error booting camera" );
+							return;
+						}
 						
-			// Start a geomuxpp daemon for each booted camera
-			bootedCameras.map( function( camera ) 
-			{				
-				// Create all launch options
-				var launch_options = 
-				[ 
-					"nice", "-1",
-					"geomuxpp", camera
-				];
-				
-				const infinite = -1;
- 
-				// Launch the video server with specified options. Attempt to restart every 1s.
-				var monitor = respawn( launch_options,
-				{
-					name: "geomuxpp[" + camera + "]",
-					maxRestarts: infinite,
-					sleep: 30000
-				} );
-				
-				monitor.on('crash',function()
-				{
-					log( "geomuxpp[" + camera + "] crashed" );
-				});
-				
-				monitor.on('spawn',function(process)
-				{
-					log( "geomuxpp[" + camera + "] spawned" );
-				});
-				
-				monitor.on('warn',function(error)
-				{
-					log( "geomuxpp[" + camera + "] warning: " + error );
-				});
-				
-				monitor.on('exit',function(code, signal)
-				{
-					log( "geomuxpp[" + camera + "] exited: code: " + code + " signal: " + signal);
-				});
+						// Create daemon
+						StartDaemon( cam );
+					} );
+				}
 
-				// Optional stdio logging
-				monitor.on('stdout',function(data)
+				if( !booted && cam.daemon )
 				{
-					var msg = data.toString('utf-8');
-					log( "geomuxpp[" + camera + "]: " + msg );
-				});
+					// Stop & delete daemon
+					cam.daemon.stop();
+					delete cam.daemon;
 
-				monitor.on('stderr',function(data)
+					// Boot the camera
+					BootCamera( cam, function( error )
+					{
+						if( error )
+						{
+							error( "Error booting camera" );
+							return;
+						}
+						
+						// Create daemon
+						StartDaemon( cam );
+					} );
+				}
+
+				if( booted && !cam.daemon )
 				{
-					var msg = data.toString('utf-8');
-					log( "geomuxpp[" + camera + "] ERROR: " + msg );
-				});
+					if( cam.daemonStarts < 3 )
+					{
+						// Create daemon
+						StartDaemon( cam );
+					}
+				}
 
-				console.log( "Starting geomuxpp[" + camera + "]..." );
-				monitor.start();
-			} );
-		}
+				// Otherwise, do nothing
+			}
+		}, 10000 );		
 	} );
 } );
 
+// Emit video registration
+self.deps.globalEventLoop.emit( 'video-deviceRegistration', results );
+		
+// -----------------------
+// Helper functions
+  
+// Creates a list with all of the dectected video devices
+function EnumerateCameras()
+{
+	var results = [];
+	
+	fs.readdir('/dev', function (err, files) 
+	{
+		if( err ) 
+		{
+			return;
+		}
+    
+		var f = files.filter( function(file)
+		{
+			return file.indexOf('video') == 0;
+		} );
+		
+		if( f.length == 0 )
+		{
+			// No video devices
+			return;
+		}
+    
+		f.forEach( function( file )
+		{
+			// Query the video device 
+			exec( 'udevadm info --query=all --name=/dev/' + file + ' | grep "S: v4l/by-id/"', function(error, stdout, stderr)
+			{
+				// Check for GEO vendor string
+				if( ( error == null ) && ( stdout.indexOf( 'GEO_Semi_Condor' ) > 0 ) )
+				{
+					// Create a result entry
+					var result = 
+					{
+						// NOTE: Add another field for camera offset and change device back to "video0"?
+						offset:   	file.slice( "video".length ),
+						device:		file,
+						deviceid: 	stdout.slice( "S: v4l/by-id/".length ),
+						format:   	'MP4'
+					};
 
+					results.push( result );
+				}
+			});
+		});
+	});
+
+	return results;
+}
+
+function BootCamera( camera, callback )
+{
+	exec( path.dirname(require.resolve('geo-video-server'))+'/platform/linux/bootcamera.sh', function( error, stdout, stderr )
+	{
+		if( error )
+		{
+			error( "Error booting camera [" + camera.offset + "] - " + error );
+			
+		}
+	} );
+}		
+
+function IsCorrectlyBooted( camera )
+{
+	return false;
+}
+
+function StartDaemon( camera )
+{
+	// Start geomuxpp for booted camera
+		// Forward stdout and stderr
+		// On exit, remove from available and registered cameras
+	
+	// Create all launch options
+	var launch_options = 
+	[ 
+		"nice", "-1",
+		"geomuxpp", camera
+	];
+	
+	const infinite = -1;
+
+	// Launch the video server with specified options. Attempt to restart every 1s.
+	camera.daemon = respawn( launch_options,
+	{
+		name: "geomuxpp[" + camera + "]",
+		maxRestarts: infinite,
+		sleep: 30000
+	} );
+	
+	camera.daemon.on('crash',function()
+	{
+		log( "geomuxpp[" + camera + "] crashed" );
+	});
+	
+	camera.daemon.on('spawn',function(process)
+	{
+		log( "geomuxpp[" + camera + "] spawned" );
+	});
+	
+	camera.daemon.on('warn',function(error)
+	{
+		log( "geomuxpp[" + camera + "] warning: " + error );
+	});
+	
+	camera.daemon.on('exit',function(code, signal)
+	{
+		log( "geomuxpp[" + camera + "] exited: code: " + code + " signal: " + signal);
+	});
+
+	// Optional stdio logging
+	camera.daemon.on('stdout',function(data)
+	{
+		var msg = data.toString('utf-8');
+		log( "geomuxpp[" + camera + "]: " + msg );
+	});
+
+	camera.daemon.on('stderr',function(data)
+	{
+		var msg = data.toString('utf-8');
+		log( "geomuxpp[" + camera + "] ERROR: " + msg );
+	});
+
+	console.log( "Starting geomuxpp[" + camera + "]..." );
+	camera.daemon.start();
+}
+
+function ListenForCameraRegistrations()
+{
+	// Setup ZMQ camera registration REQ/REP 
+	var regServer = zmq.socket( 'rep' );
+
+	// Listen for camera and channel registrations over ZeroMQ
+	regServer.bind( "ipc:///tmp/geomux_registration.ipc" );
+	regServer.on( 'message', function( msg )
+	{
+		try
+		{
+			var registration = JSON.parse( msg );
+
+			if( registration.type === "camera_registration" )
+			{
+				log( "Camera registration request: " + registration.camera );
+				
+				// Create a channel object
+				registeredCameras[ registration.camera ] = require( "camera.js" )( registration.camera, deps );
+				
+				log( "Camera " + registration.camera + " registered" );
+				
+				// Send registration success to daemon
+				regServer.send( JSON.stringify( { "response": 1 } ) );
+			}
+			else if( registration.type === "channel_registration" )
+			{
+				log( "Channel registration request: " + registration.camera + "_" + registration.channel );
+				
+				// Create a channel object
+				registeredCameras[ registration.camera ].emit( "channel_registration", registration.channel, function()
+				{					
+					log( "Channel " + registration.camera + "_" + registration.channel + " registered" );
+					
+					// Send registration success to daemon
+					regServer.send( JSON.stringify( { "response": 1 } ) );
+				} );
+			}
+		}
+		catch( err )
+		{
+			error( "Error in registration: " + err );
+			
+			// Send registration failure to daemon
+			regServer.send( JSON.stringify( { "response": 0 } ) );
+		}
+	} );
+};
