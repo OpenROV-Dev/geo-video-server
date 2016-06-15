@@ -19,6 +19,10 @@ var error		= require('debug')( 'app:error' );
 var path		= require( 'path' );
 var execP 		= require('child-process-promise').exec;
 var Q 			= require( "q" );
+var fs			= require( "fs" );
+
+var readdir     = Q.denodeify( fs.readdir );
+var readFile    = Q.denodeify( fs.readFile );
 
 // Get command line arguments
 var argv = require( "yargs" )
@@ -83,120 +87,15 @@ var UpdateCameras = function()
 	log( "Checking for new cameras" );
 
 	GetAvailableCameras()
-	.then( function( cameras )
+	.then( RemoveStaleCameras )
+	.then( BootCameras )
+	.then( GetCameraUSBMap )
+	.then( UpdateCameraUSBInfo )
+	.then( StartDaemons )
+	.then( function( results )
 	{
-		// Add new cameras to the available cameras list
-		for( var camera in cameras )
-		{
-			if( availableCameras[ camera ] == undefined )
-			{
-				availableCameras[ camera ] 				= {};
-				availableCameras[ camera ].info			= cameras[ camera ];
-				availableCameras[ camera ].daemon 		= null;
-				availableCameras[ camera ].daemonStarts = 0;
-			}
-			else
-			{
-				// Update camera info
-				availableCameras[ camera ].info	= cameras[ camera ];
-			}
-		}
-
-		log( "Cameras: " );
-		log( availableCameras );
-
-		// Do all settled stuff here.
-		var HandleBoot = function( index )
-		{
-			var camera = availableCameras[ index ];
-
-			if( camera === undefined )
-			{
-				throw "Camera [" + index + "] does not exist";
-			}
-			else
-			{
-				// Handle each combination of boot state and daemon state
-				if( !camera.info.booted && !camera.daemon )
-				{
-					log( "Booting camera for first time: " + index );
-
-					// Boot the camera
-					return BootCamera( index );
-				}
-				else if( !camera.info.booted && camera.daemon )
-				{
-					log( "Shutting down daemon for un-booted camera: " + index );
-
-					
-					var deferred = Q.defer();
-
-					// Stop & delete daemon
-					camera.daemon.stop( function()
-					{
-						delete camera.daemon;
-						deferred.resolve();
-					});
-
-					return deferred.promise.then( function()
-					{
-						// Boot the camera and start the daemon
-						return BootCamera( index );
-					});	
-				}
-				else if( camera.info.booted && !camera.daemon )
-				{
-					log( "Starting daemon for booted camera: " + index );
-
-					if( camera.daemonStarts < 3 )
-					{
-						// Create daemon
-						return StartDaemon( index )
-						.then( function()
-						{
-							// Emit video registration
-							plugin.emit( 'video-deviceRegistration', camera.info );
-						} );
-					}
-				}
-				else if( cameras[ index ] == undefined )
-				{
-					// Remove non-existent cameras
-					log( "Removed non-existent camera: " + index );
-
-					if( camera.daemon !== undefined )
-					{
-						var deferred = Q.defer();
-
-						// Stop the daemon and delete this camera
-						camera.daemon.stop( function()
-						{
-							delete camera;
-							deferred.resolve();
-						});
-
-						return deferred.promise;
-					}
-				}
-				else
-				{
-					// Otherwise, do nothing
-					log( "Nothing to do" );
-				}
-			}
-		}
-
-		// All settled
-		var camPromises = Object.keys( availableCameras ).map( HandleBoot );
-
-		log( "Handling" );
-
-		Q.allSettled( camPromises )
-		.then( function( results )
-		{
-			setTimeout( UpdateCameras, 5000 );
-		})
-	});
+		setTimeout( UpdateCameras, 5000 );
+	})
 };
 
 LoadKernelModule()
@@ -288,14 +187,10 @@ function GetAvailableCameras()
 						bus: bus,
 						device: device
 					};
-
-					log( "Found camera: " + index );
 				}
 			}
 		}
 
-		log( "Got cameras" );
-		log( cameras );
 		return cameras;	
     })
 	.catch( function( err )
@@ -303,6 +198,108 @@ function GetAvailableCameras()
 		error( "Error getting camera list: " + err );
 		return cameras;
 	})
+}
+
+function RemoveStaleCameras( cameras )
+{
+	var RemoveStale = function( index )
+	{
+		var camera = availableCameras[ index ];
+
+		if( cameras[ index ] == undefined )
+		{
+			// Remove non-existent cameras
+			log( "Removed non-existent camera: " + index );
+
+			var deferred = Q.defer();
+
+			if( camera.daemon )
+			{
+				// Stop the daemon and delete this camera
+				camera.daemon.stop( function()
+				{
+					delete availableCameras[ index ];
+					deferred.resolve();
+				});
+
+				return deferred.promise;
+			}
+			else
+			{
+				
+				delete availableCameras[ index ];
+
+				deferred.resolve();
+				return deferred.promise;
+			}
+		}
+	}
+
+	// All settled
+	var promises = Object.keys( availableCameras ).map( RemoveStale );
+
+	return Q.allSettled( promises )
+	.then( function()
+	{
+		return cameras;
+	})
+}
+
+function BootCameras( cameras )
+{
+	// Add new cameras to the available cameras list
+	for( var camera in cameras )
+	{
+		if( availableCameras[ camera ] == undefined )
+		{
+			availableCameras[ camera ] 				= {};
+			availableCameras[ camera ].mxcamInfo	= cameras[ camera ];
+			availableCameras[ camera ].usbInfo		= null;
+			availableCameras[ camera ].daemon 		= null;
+			availableCameras[ camera ].daemonStarts = 0;
+		}
+		else
+		{
+			// Update camera info
+			availableCameras[ camera ].mxcamInfo	= cameras[ camera ];
+		}
+	}
+
+	log( "Cameras: " );
+	log( availableCameras );
+
+	// Do all settled stuff here.
+	var HandleBoot = function( index )
+	{
+		var camera = availableCameras[ index ];
+
+		if( camera === undefined )
+		{
+			throw "Camera [" + index + "] does not exist";
+		}
+		else
+		{
+			// Handle each combination of boot state and daemon state
+			if( !camera.mxcamInfo.booted )
+			{
+				log( "Booting camera for first time: " + index );
+
+				// Boot the camera
+				return BootCamera( index );
+			}
+			else
+			{
+				log( "Nothing to do" );
+			}
+		}
+	}
+
+	// All settled
+	var camPromises = Object.keys( availableCameras ).map( HandleBoot );
+
+	log( "Handling" );
+
+	return Q.allSettled( camPromises );
 }
 
 function BootCamera( camera, callback )
@@ -314,31 +311,163 @@ function BootCamera( camera, callback )
 	} );
 }		
 
+// Creates a list with all of the dectected video devices
+function GetCameraUSBMap()
+{
+    var usbMap = {};
+    var i = 0;
+
+    return readdir( '/dev' )
+    .then( function( results )
+    {
+        var f = results.filter( function(file)
+        {
+            return file.indexOf('video') == 0;
+        });
+
+        return f;
+    } )
+    .then( function( files )
+    {    
+        var GetUSBInfoFromDevFile = function( file )
+        {
+            var udev_command = "udevadm info --query=all --name=" + file;
+
+            return execP( udev_command )
+            .then( function( result )
+            {
+                // Check to make sure its a geo
+                if( result.stdout.indexOf( "Condor" ) == -1 )
+                {
+                    throw "Not a GEO cam";
+                }
+
+                var interface = ~~result.stdout.match( /(ID_USB_INTERFACE_NUM=)(.*)(\n)/)[2];
+
+                if( interface !== 0 )
+                {
+                    throw "Not the primary interface";
+                }
+
+                // DEVPATH=/devices/pci0000:00/0000:00:14.0/usb1/1-3/1-3:1.2/video4linux/video4
+                var devpath = path.dirname( "/sys" + result.stdout.match( /(DEVPATH=)(.*)(video4linux)/)[2] );
+                var port = path.basename( devpath );
+
+                var bus = null;
+                var dev = null;
+
+                var GetBusNum = readFile( devpath + "/busnum", "utf-8" )
+                .then( function( busnum )
+                {
+                    bus = ~~busnum;
+                });
+
+                var GetDevNum = readFile( devpath + "/devnum", "utf-8" )
+                .then( function( devnum )
+                {
+                    dev = ~~devnum;
+                } );
+                
+                return Q.all( [ GetBusNum, GetDevNum ] )
+                .then( function( results )
+                {
+                    // Add info to the map
+                    usbMap[ bus + ":" + dev ] = 
+                    {
+                        path: "/dev/" + file,
+                        name: file,
+                        port: port,
+						offset: file.slice( "video".length )
+                    };
+                })
+            });
+        };
+
+        var promises = files.map( GetUSBInfoFromDevFile );
+
+        return Q.allSettled( promises );           
+    })
+    .then( function( results )
+    {
+        return usbMap;
+    })
+    .catch( function( err )
+    {
+        error( "Error constructing USB map: " + err );
+        return {};
+    } );
+};
+
+function UpdateCameraUSBInfo( usbMap )
+{
+	var UpdateCameras = function( index )
+	{
+		var camera = availableCameras[ index ];
+
+		if( camera.mxcamInfo.booted )
+		{
+			if( usbMap[ camera.mxcamInfo.bus + ":" + camera.mxcamInfo.device ] !== undefined )
+			{
+				camera.usbInfo = usbMap[ camera.mxcamInfo.bus + ":" + camera.mxcamInfo.device ];
+				log( "Camera usb info: " + JSON.stringify( camera.usbInfo ) );
+			}
+		}
+	}
+
+	// All settled
+	var promises = Object.keys( availableCameras ).map( UpdateCameras );
+
+	return Q.allSettled( promises );
+};
+
+function StartDaemons()
+{
+	log( "Checking daemon status" );
+
+	var Start = function( index )
+	{
+		var camera = availableCameras[ index ];
+
+		if( !camera.daemon )
+		{
+			if( camera.usbInfo )
+			{
+				log( "Creating daemon for: " + index );
+				StartDaemon( index );
+			}
+		}
+	}
+
+	// All settled
+	var promises = Object.keys( availableCameras ).map( Start );
+
+	return Q.allSettled( promises );
+};
 
 function StartDaemon( camera )
 {
-	// Create all launch options
-	var launch_options2 = 
-	[ 
-		"nice", "-1",
-		"kate"
-	];
+	// // Create all launch options
+	// var launch_options2 = 
+	// [ 
+	// 	"nice", "-1",
+	// 	"kate"
+	// ];
 
 	// Create all launch options
 	var launch_options = 
 	[ 
 		"nice", "-1",
-		"geomuxpp", camera
+		"geomuxpp", availableCameras[ camera ].usbInfo.offset
 	];
 	
 	const infinite = -1;
 
 	// Launch the video server with specified options. Attempt to restart every 1s.
-	availableCameras[ camera ].daemon = respawn( launch_options2,
+	availableCameras[ camera ].daemon = respawn( launch_options,
 	{
 		name: "geomuxpp[" + camera + "]",
 		maxRestarts: infinite,
-		sleep: 30000
+		sleep: 15000
 	} );
 	
 	availableCameras[ camera ].daemon.on('crash',function()
