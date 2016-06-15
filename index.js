@@ -92,9 +92,13 @@ var UpdateCameras = function()
 	.then( GetCameraUSBMap )
 	.then( UpdateCameraUSBInfo )
 	.then( StartDaemons )
-	.then( function( results )
+	.then( PostDeviceRegistrations )
+	.catch( function( err )
 	{
-		PostDeviceRegistrations();
+		error( "Error updating cameras: " + err );
+	} )
+	.done( function()
+	{
 		setTimeout( UpdateCameras, 5000 );
 	})
 };
@@ -303,11 +307,15 @@ function BootCameras( cameras )
 	return Q.allSettled( camPromises );
 }
 
-function BootCamera( camera, callback )
+function BootCamera( camera )
 {
-	return execP( __dirname + "platform/linux/bootcamera.sh -c=" + camera )
-	.then( function()
+	log( "Booting camera: " + camera );
+
+	return execP( __dirname + "/platform/linux/bootcamera.sh -c=" + camera )
+	.then( function( result )
 	{
+		error( result.stderr );
+		log( result.stdout );
 		return camera;
 	} );
 }		
@@ -518,19 +526,22 @@ function PostDeviceRegistrations()
 {
 	var update = [];
 
-	var Thing = function( index )
+	var GetRegistrationInfo = function( index )
 	{
-		var n = {
-			device: availableCameras[ index ].usbInfo.offset,
-			deviceid: "test",
-			format: 'MP4'
-		};
+		if( availableCameras[ index ].usbInfo )
+		{
+			var n = {
+				device: availableCameras[ index ].usbInfo.offset,
+				deviceid: "test",
+				format: 'MP4'
+			};
 
-		log( "new device: " + JSON.stringify( n ) );
-		update.push(n);
+			log( "new device: " + JSON.stringify( n ) );
+			update.push(n);
+		}
 	}
 
-	Object.keys( availableCameras ).map( Thing );
+	Object.keys( availableCameras ).map( GetRegistrationInfo );
 
 	log( "Emitting video info" );
 	plugin.emit('video-deviceRegistration',update);
