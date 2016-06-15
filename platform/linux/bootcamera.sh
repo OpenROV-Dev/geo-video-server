@@ -1,61 +1,43 @@
 #!/bin/bash
-echo "--------------"
-echo "BOOTING GC6500"
+# Handle input options
+for i in "$@"
+do
+case $i in
 
-if [ -f /.need-depmod ]
+    -c=*)      
+    CAMERA_INDEX="${i#*=}"
+    shift
+    ;;
+    
+    # unknown option
+    *)        
+    ;;
+esac
+done
+
+
+if [ -z "${CAMERA_INDEX}" ]; 
 then
-    echo "Loading kernel modules..."
-    modprobe -r uvcvideo || true
-    depmod -a
-    modprobe uvcvideo
-    rm /.need-depmod
-    echo "Kernel modules loaded."
+	echo "No camera specified"
+    exit 1
 fi
-
-echo "Detecting camera..."
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-geoCameraFound=$(mxcam list | grep -q 'device #1')
-
-if ! $geoCameraFound
-then
-    echo "No Geo Camera found"
-    exit 1004
-fi
-
-echo "Detected camera."
-echo "Checking camera status..."
-
-mxcam whoami | grep -q "Waiting for USB boot"
-awaitingBoot=$?
-
-if [ $awaitingBoot -eq 0 ]
-then
-    echo "Camera firmware not loaded."
-    echo "Booting camera..."
-    mxcam boot $DIR/../../firmware/gc6500_ddrboot_fw.gz.img $DIR/../../geoconf/ov4689_H264_1080p30.json
-    sleep 5
-    
-    echo "Camera booted."
-else
-    echo "Camera already booted."
-    
-    echo "Checking if camera is in SNOR mode..."
-    mxcam bootmode | grep -qc 'snor'
-    bootmodesnor=$?
-    
-    if [ $bootmodesnor -eq 0 ]
-    then
-        echo "Camera is in factory SNOR mode, changing to USB boot..."
-        mxcam bootmode usb
-        sleep 1
-        mxcam flash --silent --bootloader $DIR/../../firmware/gc6500_btld_ddrboot_534_epwr.rom
-        sleep 3
-        mxcam reset
-        sleep 3
-        mxcam boot $DIR/../../firmware/gc6500_ddrboot_fw.gz.img $DIR/../../geoconf/ov4689_H264_1080p30.json
-        echo "Camera booted in USB mode."
-    fi
-fi
 
 echo "--------------"
+echo "Booting camera: ${CAMERA_INDEX}"
+
+# echo "Setting boot mode to USB..."
+# mxcam --device ${CAMERA_INDEX} bootmode usb
+# sleep 1
+# echo "Flashing bootloader..."
+# mxcam --device ${CAMERA_INDEX} flash --silent --bootloader $DIR/../../firmware/gc6500_btld_ddrboot_534_epwr.rom
+# sleep 3
+# echo "Resetting camera..."
+# mxcam --device ${CAMERA_INDEX} reset
+# sleep 3
+echo "Loading firmware and configuration..."
+mxcam --device ${CAMERA_INDEX} boot $DIR/../../firmware/gc6500_ddrboot_fw.gz.img $DIR/../../geoconf/ov4689_H264_1080p30.json
+echo "Camera booted!"
+
+exit 0
