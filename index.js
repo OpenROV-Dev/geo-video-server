@@ -9,7 +9,7 @@ if( process.env[ 'NODE_PATH' ] !== undefined )
 }
 
 // Append modules directory to path
-process.env['NODE_PATH'] = __dirname + ':' + oldpath;
+process.env['NODE_PATH'] = __dirname + '/:' + __dirname + "/modules/:" + oldpath;
 require('module').Module._initPaths();
 
 const respawn 	= require('respawn');
@@ -94,6 +94,7 @@ var UpdateCameras = function()
 	.then( StartDaemons )
 	.then( function( results )
 	{
+		PostDeviceRegistrations();
 		setTimeout( UpdateCameras, 5000 );
 	})
 };
@@ -146,7 +147,7 @@ LoadKernelModule()
   
 function LoadKernelModule()
 {
-	return execP( "platform/linux/loadkernelmodule.sh" );
+	return execP( __dirname + "/platform/linux/loadkernelmodule.sh" );
 }	
 
 function GetAvailableCameras()
@@ -304,7 +305,7 @@ function BootCameras( cameras )
 
 function BootCamera( camera, callback )
 {
-	return execP( "platform/linux/bootcamera.sh -c=" + camera )
+	return execP( __dirname + "platform/linux/bootcamera.sh -c=" + camera )
 	.then( function()
 	{
 		return camera;
@@ -511,6 +512,28 @@ function StartDaemon( camera )
 
 	console.log( "Starting geomuxpp[" + camera + "]..." );
 	availableCameras[ camera ].daemon.start();
+}
+
+function PostDeviceRegistrations()
+{
+	var update = [];
+
+	var Thing = function( index )
+	{
+		var n = {
+			device: availableCameras[ index ].usbInfo.offset,
+			deviceid: "test",
+			format: 'MP4'
+		};
+
+		log( "new device: " + JSON.stringify( n ) );
+		update.push(n);
+	}
+
+	Object.keys( availableCameras ).map( Thing );
+
+	log( "Emitting video info" );
+	plugin.emit('video-deviceRegistration',update);
 }
 
 function ListenForCameraRegistrations()
