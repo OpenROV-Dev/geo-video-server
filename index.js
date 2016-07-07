@@ -97,7 +97,7 @@ var UpdateCameras = function()
 	{
 		error( "Error updating cameras: " + err );
 	} )
-	.done( function()
+	.then( function()
 	{
 		setTimeout( UpdateCameras, 5000 );
 	})
