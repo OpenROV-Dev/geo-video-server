@@ -86,6 +86,15 @@ var UpdateCameras = function()
 {
 	log( "Checking for new cameras" );
 
+	// TEMP: Limit to one camera because of problem with beaglebone performance
+	// TODO: Add detection for Beaglebone through an input argument/env variable to enable this
+	if( Object.keys( registeredCameras ).length > 0 )
+	{
+			log( "Camera already loaded" );
+			setTimeout( UpdateCameras, 5000 );
+			return;
+	}
+
 	GetAvailableCameras()
 	.then( RemoveStaleCameras )
 	.then( BootCameras )
