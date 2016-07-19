@@ -474,34 +474,34 @@ function StartDaemon( camera )
 	// Launch the video server with specified options. Attempt to restart every 1s.
 	availableCameras[ camera ].daemon = respawn( launch_options,
 	{
-		name: "geomuxpp[" + camera + "]",
+		name: "geomuxpp[" + availableCameras[ camera ].usbInfo.offset + "]",
 		maxRestarts: infinite,
 		sleep: 15000
 	} );
 	
 	availableCameras[ camera ].daemon.on('crash',function()
 	{
-		log( "geomuxpp[" + camera + "] crashed" );
+		log( "geomuxpp[" + availableCameras[ camera ].usbInfo.offset + "] crashed" );
 	});
 	
 	availableCameras[ camera ].daemon.on('spawn',function(process)
 	{
-		log( "geomuxpp[" + camera + "] spawned" );
+		log( "geomuxpp[" + availableCameras[ camera ].usbInfo.offset + "] spawned" );
 	});
 	
 	availableCameras[ camera ].daemon.on('warn',function(error)
 	{
-		log( "geomuxpp[" + camera + "] warning: " + error );
+		log( "geomuxpp[" + availableCameras[ camera ].usbInfo.offset + "] warning: " + error );
 	});
 	
 	availableCameras[ camera ].daemon.on('exit',function(code, signal)
 	{
-		log( "geomuxpp[" + camera + "] exited: code: " + code + " signal: " + signal);
+		log( "geomuxpp[" + availableCameras[ camera ].usbInfo.offset + "] exited: code: " + code + " signal: " + signal);
 
 		// Remove from registered cameras
-		if( registeredCameras[ camera ] !== undefined )
+		if( registeredCameras[ availableCameras[ camera ].usbInfo.offset ] !== undefined )
 		{
-			delete registeredCameras[ camera ];
+			delete registeredCameras[ availableCameras[ camera ].usbInfo.offset ];
 		}
 	});
 
@@ -509,13 +509,13 @@ function StartDaemon( camera )
 	availableCameras[ camera ].daemon.on('stdout',function(data)
 	{
 		var msg = data.toString('utf-8');
-		log( "geomuxpp[" + camera + "]: " + msg );
+		log( "geomuxpp[" + availableCameras[ camera ].usbInfo.offset + "]: " + msg );
 	});
 
 	availableCameras[ camera ].daemon.on('stderr',function(data)
 	{
 		var msg = data.toString('utf-8');
-		log( "geomuxpp[" + camera + "] ERROR: " + msg );
+		log( "geomuxpp[" + availableCameras[ camera ].usbInfo.offset + "] ERROR: " + msg );
 	});
 
 	console.log( "Starting geomuxpp[" + camera + "]..." );
