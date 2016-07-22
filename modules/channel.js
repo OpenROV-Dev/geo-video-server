@@ -190,14 +190,24 @@ var Channel = function( camera, channelNum )
 	// Intervals
 	
 	// Ask geomuxpp for health reports every 5 secs
-	this.healthTimer = setInterval( function()
+	this.healthInterval = setInterval( function()
 	{
 		SendChannelCommand( "report_health" );
 	}, 5000 );
 	
-	// Public functions
+	// Cleanup function
 	this.Cleanup = function()
 	{
+		console.log( "channel cleanup" );
+
+		self.removeAllListeners();
+		dataFrameSub.removeAllListeners();
+		initFrameSub.removeAllListeners();
+		errorSub.removeAllListeners();
+		statusSub.removeAllListeners();
+		settingsSub.removeAllListeners();
+		apiSub.removeAllListeners();
+
 		clearInterval( self.announcementInterval );
 		clearInterval( self.healthInterval );
 	}
