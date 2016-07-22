@@ -61,6 +61,15 @@ var Camera = function( cameraOffset, deps )
     // Connect to geomuxpp command socket
     this.commandPub.connect( "ipc:///tmp/geomux_command" + cameraOffset + ".ipc" );
     
+    // Public functions
+    this.Cleanup = function()
+    {
+        Object.keys( channels ).map( function( channel )
+        {
+            channels[ channel ].Cleanup();
+        })
+    }
+
     // ----------------
 	// Helper functions
     	

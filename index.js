@@ -510,6 +510,8 @@ function StartDaemon( camera )
 		// Remove from registered cameras
 		if( registeredCameras[ availableCameras[ camera ].usbInfo.offset ] !== undefined )
 		{
+			// Cleanup camera
+			registeredCameras[ availableCameras[ camera ].usbInfo.offset ].Cleanup();
 			delete registeredCameras[ availableCameras[ camera ].usbInfo.offset ];
 		}
 	});

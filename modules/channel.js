@@ -25,6 +25,8 @@ var Channel = function( camera, channelNum )
 	this.settings		= {};
 	this.api			= {};
 	
+	this.announcementInterval = {};
+	this.healthInterval	= {};
 
 	// Create video socket
 	var videoSocket		= require('socket.io')(server,{origins: '*:*',path:defaults.wspath + channelPostfix });
@@ -173,14 +175,8 @@ var Channel = function( camera, channelNum )
 		plugin.emit( "geomux.video.announcement", camera.offset, channelNum, announcement );
 		log( "Channel Announcement: " + JSON.stringify( announcement ) );
 		
-		// Create interval timer
-        if( beaconTimer !== null )
-		{
-			clearInterval( beaconTimer );
-        }
-		
 		// Announce camera endpoint every 5 secs
-        setInterval( function()
+        self.announcementInterval = setInterval( function()
 		{
 			log( "Channel Announcement: " + JSON.stringify( announcement ) );
 			plugin.emit( "geomux.video.announcement", camera.offset, channelNum, announcement );
@@ -194,11 +190,18 @@ var Channel = function( camera, channelNum )
 	// Intervals
 	
 	// Ask geomuxpp for health reports every 5 secs
-	setInterval( function()
+	this.healthTimer = setInterval( function()
 	{
 		SendChannelCommand( "report_health" );
 	}, 5000 );
 	
+	// Public functions
+	this.Cleanup = function()
+	{
+		clearInterval( self.announcementInterval );
+		clearInterval( self.healthInterval );
+	}
+
 	// ----------------
 	// Helper functions
 	
