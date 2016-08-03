@@ -96,8 +96,8 @@ var Channel = function( camera, channelNum )
 		// Set some initial settings
 		ApplySettings(
 		{
-			"bitrate": 		{ "value": 2000000 },
-			"goplen": 		{ "value": 10 },
+			"bitrate": 		{ "value": 10000000 },
+			"goplen": 		{ "value": 90 },
 			"pict_timing": 	{ "enabled": true },
 			"vui":			{ "enabled": true }
 		}
