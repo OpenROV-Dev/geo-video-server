@@ -474,7 +474,7 @@ function StartDaemon( camera )
 	// Create all launch options
 	var launch_options = 
 	[ 
-		"nice", "-1",
+		"nice", "--1",
 		"geomuxpp", availableCameras[ camera ].usbInfo.offset
 	];
 	
