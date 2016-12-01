@@ -79,7 +79,6 @@ var deps =
 
 var availableCameras = {};
 var registeredCameras = {};
-var readyReceived = false;
 
 // Check for new cameras every 10 secs
 var UpdateCameras = function()
@@ -112,6 +111,21 @@ var UpdateCameras = function()
 	})
 };
 
+var _defferedServicesRunning = false;
+var startDeferredServices = function(){
+	if( _defferedServicesRunning == true )
+	{
+		return;
+	}
+
+	log( "Starting deferred services" );
+	_defferedServicesRunning = true;
+
+	// Start listening for camera registrations
+	ListenForCameraRegistrations();
+	UpdateCameras();
+}
+
 LoadKernelModule()
 .then( function()
 {
@@ -134,20 +148,8 @@ LoadKernelModule()
 			}
 		} );
 
-		client.on( "geomux.ready", function()
-		{	
-			if( readyReceived == true )
-			{
-				return;
-			}
+		startDeferredServices();
 
-			log( "Got ready from plugin" );
-			readyReceived = true;
-
-			// Start listening for camera registrations
-			ListenForCameraRegistrations();
-			UpdateCameras();
-		} );
 	} );
 } )
 .catch( function( err )
