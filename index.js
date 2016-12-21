@@ -170,7 +170,7 @@ function GetAvailableCameras()
 	var cameras = {};
 
     // Call mxcam to get a list of available cameras 
-    return execP( 'mxcam list' )
+    return execP( 'mxcam list'  ,{timeout:5000})
 	.then( function( result )
     {
 		log( "handling mxcam list" );
@@ -322,7 +322,7 @@ function BootCamera( camera )
 {
 	log( "Booting camera: " + camera );
 
-	return execP( __dirname + "/platform/linux/bootcamera.sh -c=" + camera )
+	return execP( __dirname + "/platform/linux/bootcamera.sh -c=" + camera  ,{timeout:5000})
 	.then( function( result )
 	{
 		error( result.stderr );
@@ -353,7 +353,7 @@ function GetCameraUSBMap()
         {
             var udev_command = "udevadm info --query=all --name=" + file;
 
-            return execP( udev_command )
+            return execP( udev_command ,{timeout:5000} )
             .then( function( result )
             {
                 // Check to make sure its a geo
