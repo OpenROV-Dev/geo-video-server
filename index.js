@@ -68,7 +68,29 @@ console.log( 'geo-video-server listening on ' + defaults.port );
 })
 
 // Create Socket.IO server for interactions with server plugin
-var plugin = require( 'socket.io' )( server,{ origins: '*:*', path: defaults.wspath } );
+// We defer starting the listener by not passing in the server to the constructor
+// so that we attach explicitly later on after setting up our listeners.
+var plugin = require( 'socket.io' )({ origins: '*:*', path: defaults.wspath } );
+
+// Establish a connection with the server plugin
+plugin.on( "connection", function( client )
+{
+	// Listen for ready message from server plugin
+	log( "New geo-video-server connection!" );
+	
+	// Listen for camera commands and route them to the correct camera
+	client.on( "geomux.command", function( camera, command, params )
+	{
+		if( registeredCameras[ camera ] !== undefined )
+		{
+			registeredCameras[ camera ].emit( "command", command, params );
+		}
+		else
+		{
+			error( "Camera [" + camera + "] - Failed to execute command: " + command + "( " + JSON.stringify( params ) + " ) - Camera doesn't exist." );
+		}
+	} );
+} );
 
 var deps =
 {
@@ -111,46 +133,14 @@ var UpdateCameras = function()
 	})
 };
 
-var _defferedServicesRunning = false;
-var startDeferredServices = function(){
-	if( _defferedServicesRunning == true )
-	{
-		return;
-	}
-
-	log( "Starting deferred services" );
-	_defferedServicesRunning = true;
-
-	// Start listening for camera registrations
-	ListenForCameraRegistrations();
-	UpdateCameras();
-}
-
 LoadKernelModule()
 .then( function()
 {
-	// Establish a connection with the server plugin
-	plugin.on( "connection", function( client )
-	{
-		// Listen for ready message from server plugin
-		log( "New geo-video-server connection!" );
-		
-		// Listen for camera commands and route them to the correct camera
-		client.on( "geomux.command", function( camera, command, params )
-		{
-			if( registeredCameras[ camera ] !== undefined )
-			{
-				registeredCameras[ camera ].emit( "command", command, params );
-			}
-			else
-			{
-				error( "Camera [" + camera + "] - Failed to execute command: " + command + "( " + JSON.stringify( params ) + " ) - Camera doesn't exist." );
-			}
-		} );
-
-		startDeferredServices();
-
-	} );
+	log( "Starting camaera registration and camera update processes" );
+	ListenForCameraRegistrations();
+	UpdateCameras();
+	//Start the socket.io listener
+	plugin.attach(server);
 } )
 .catch( function( err )
 {
