@@ -138,9 +138,16 @@ var Channel = function( camera, channelNum )
 	} );
 	
 	// Listen for the init frame
-	initFrameSub.on( 'message', function( topic, data )
+	initFrameSub.on( 'message', function( topic, ftype ,moov )
     {
-		self.initFrame = data;
+
+		self.ftypeBox = ftype;
+		self.moovBox = moov;
+		
+        	var data = new Uint8Array(ftype.byteLength + moov.byteLength);
+        	data.set(new Uint8Array(ftype), 0);
+        	data.set(new Uint8Array(moov), ftype.byteLength);		
+		self.initFrame = data;	
 		
 		log( "Channel status: Got init frame" );
 		
